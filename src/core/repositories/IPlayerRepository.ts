@@ -4,6 +4,7 @@ export interface IPlayerRepository {
   play(song: Song): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
+  stop(): Promise<void>;
   seek(position: number): Promise<void>;
   setVolume(volume: number): Promise<void>;
   getVolume(): Promise<number>;
@@ -11,6 +12,6 @@ export interface IPlayerRepository {
   getDuration(): Promise<number>;
   reset(): void;
   onPlaybackUpdate(
-    callback: (position: number, duration: number) => void,
+    callback: (position: number, duration: number, isPlaying: boolean) => void,
   ): () => void;
 }

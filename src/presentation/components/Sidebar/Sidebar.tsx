@@ -174,9 +174,9 @@ const Sidebar: React.FC = () => {
       </div>
 
       <div className="user-profile">
-        <div className="user-avatar">D</div>
+        <div className="user-avatar">K</div>
         <div className="user-info">
-          <div className="user-name">Dicey</div>
+          <div className="user-name">Kalon</div>
           <div className="user-plan">Pro Plan</div>
         </div>
         <div className="user-settings" onClick={() => navigate("/settings")}>

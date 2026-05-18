@@ -1,10 +1,9 @@
 import { IPlayerRepository } from "../core/repositories/IPlayerRepository";
 import { Song } from "../core/entities/Song";
-import { tauriCommands } from "../services/tauriBridge";
+import { tauriCommands, tauriEvents } from "../services/tauriBridge";
 
 export class TauriPlayerRepository implements IPlayerRepository {
   private volumeCache = 70;
-  private pollInterval: ReturnType<typeof setInterval> | null = null;
 
   async play(song: Song): Promise<void> {
     await tauriCommands.playTrack(song);
@@ -16,6 +15,9 @@ export class TauriPlayerRepository implements IPlayerRepository {
 
   async resume(): Promise<void> {
     await tauriCommands.resumePlayback();
+  }
+  async stop(): Promise<void> {
+    await tauriCommands.stopPlayback();
   }
 
   async seek(position: number): Promise<void> {
@@ -44,28 +46,14 @@ export class TauriPlayerRepository implements IPlayerRepository {
   }
 
   reset(): void {
-    // no-op — usePlayer handles resetting
+    // State is managed by usePlayer hook
   }
 
   onPlaybackUpdate(
-    callback: (position: number, duration: number) => void,
+    callback: (position: number, duration: number, isPlaying: boolean) => void,
   ): () => void {
-    if (this.pollInterval) clearInterval(this.pollInterval);
-
-    this.pollInterval = setInterval(async () => {
-      try {
-        const state = await tauriCommands.getPlaybackState();
-        callback(state.position, state.duration);
-      } catch {
-        // ignore
-      }
-    }, 200);
-
-    return () => {
-      if (this.pollInterval) {
-        clearInterval(this.pollInterval);
-        this.pollInterval = null;
-      }
-    };
+    return tauriEvents.onPlaybackUpdate((data) => {
+      callback(data.position, data.duration, data.is_playing);
+    });
   }
 }

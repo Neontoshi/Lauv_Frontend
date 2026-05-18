@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useDeferredValue } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePlayerContext as usePlayer } from "../../hooks/PlayerContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -57,8 +57,7 @@ const LyricsPane: React.FC = () => {
   const { currentSong, currentProgress } = usePlayer();
 
   // Defer progress updates so lyric tracking never blocks the UI thread.
-  const deferredProgress = useDeferredValue(currentProgress);
-
+  const deferredProgress = currentProgress;
   const [lyrics, setLyrics] = useState<LrcLine[] | null>(null);
   const [status, setStatus] = useState<
     "idle" | "loading" | "found" | "not_found"

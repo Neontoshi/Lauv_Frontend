@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "../stores/playerStore";
-import { useLibraryStore } from "../stores/libraryStore";
 import { useQueueStore } from "../stores/queueStore";
 import { getPlayerRepository } from "../../infrastructure/ServiceProvider";
+import { tauriCommands } from "../../services/tauriBridge";
 
 const pendingPlayId = { current: null as string | null };
 
@@ -10,14 +10,11 @@ export const usePlayer = () => {
   const {
     currentSong,
     isPlaying,
-    currentProgress,
     volume,
     isMuted,
-    duration,
     isShuffle,
     repeatMode,
     setCurrentSong,
-    togglePlay: togglePlayStore,
     setProgress,
     setPlaying,
     setVolume: setVolumeStore,
@@ -26,17 +23,15 @@ export const usePlayer = () => {
     toggleRepeat: toggleRepeatStore,
   } = usePlayerStore();
 
-  const { songs } = useLibraryStore();
-  const { setQueue, getNextSong, getPrevSong } = useQueueStore();
+  const { getNextSong, getPrevSong } = useQueueStore();
   const playerRepo = useRef(getPlayerRepository());
+
   const isLoadingRef = useRef(false);
-  const ignorePositionRef = useRef(false);
-  const { isLoading, setIsLoading } = usePlayerStore();
-  const ignoreDurationRef = useRef(false);
+  const isSeekingRef = useRef(false);
+  const ignorePositionUntil = useRef(0);
 
   const lastPlayedId = useRef<string | null>(null);
   const songEndHandled = useRef(false);
-  const playToken = useRef(0);
   const streamingVideoId = useRef<string | null>(null);
 
   const playSong = useCallback(async (song: typeof currentSong) => {
@@ -47,101 +42,60 @@ export const usePlayer = () => {
 
     playerRepo.current.reset();
 
+    const wasPaused = !usePlayerStore.getState().isPlaying;
+
     pendingPlayId.current = song.id;
     lastPlayedId.current = song.id;
+
     if (song.videoId) {
       streamingVideoId.current = song.videoId;
     }
 
-    const token = ++playToken.current;
     songEndHandled.current = false;
 
-    try {
-      await playerRepo.current.pause();
-    } catch {}
-
-    setPlaying(false);
     setProgress(0);
-    ignorePositionRef.current = true;
-    const { setDuration } = usePlayerStore.getState();
-    ignoreDurationRef.current = true;
-    setDuration(0);
-    if (song.duration && song.duration > 0) {
-      setDuration(song.duration);
-    }
     try {
-      setIsLoading(true);
+      await playerRepo.current.stop();
+    } catch {}
+    ignorePositionUntil.current = Date.now() + 500;
+
+    const { setDuration } = usePlayerStore.getState();
+    setDuration(song.duration || 0);
+
+    try {
       isLoadingRef.current = true;
+      usePlayerStore.getState().setIsLoading(true);
 
       if (song.source === "youtube" && song.videoId) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const streamPath: string = await invoke("stream_youtube", {
-          videoId: song.videoId,
+        const directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
+        await playerRepo.current.play({
+          ...song,
+          path: directUrl,
+          source: "local",
         });
-        streamingVideoId.current = null;
-        if (token !== playToken.current) return;
-        if (streamPath.startsWith("/tmp/lauv_yt_")) {
-          isLoadingRef.current = false;
-          ignorePositionRef.current = false;
-          usePlayerStore.getState().setIsLoading(false);
-        }
-        const streamSong = { ...song, path: streamPath };
-        await playerRepo.current.play(streamSong);
       } else {
-        if (token !== playToken.current) return;
-        isLoadingRef.current = false;
-        ignorePositionRef.current = false;
-        usePlayerStore.getState().setIsLoading(false);
         await playerRepo.current.play(song);
       }
 
-      if (token === playToken.current) {
-        setPlaying(true);
+      if (wasPaused) {
+        await playerRepo.current.pause();
       }
+      ignorePositionUntil.current = 0;
     } catch (err) {
       console.error("Failed to play song:", err);
       streamingVideoId.current = null;
-      isLoadingRef.current = false;
-      ignorePositionRef.current = false;
       usePlayerStore.getState().setError(String(err));
-      usePlayerStore.getState().setIsLoading(false);
-      if (token === playToken.current) {
-        setPlaying(false);
-      }
     } finally {
       pendingPlayId.current = null;
+      isLoadingRef.current = false;
+      usePlayerStore.getState().setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (!currentSong) return;
-
     playSong(currentSong);
   }, [currentSong?.id]);
-
-  // Rebuild the queue whenever the library loads or the current song changes.
-  // Runs separately from playSong so we always have an up-to-date queue even
-  // if songs weren't loaded yet when the song effect first fired.
-  useEffect(() => {
-    if (!currentSong || songs.length === 0) return;
-
-    if (currentSong.source === "youtube") {
-      // For YouTube songs put just the current song in the queue so
-      // next/prev still work (prev goes back to whatever was before it).
-      const queueState = useQueueStore.getState();
-      const isInQueue = queueState.queue.some((s) => s.id === currentSong.id);
-      if (!isInQueue) {
-        setQueue([currentSong], currentSong, "search");
-      }
-      return;
-    }
-
-    const currentIndex = songs.findIndex((s) => s.id === currentSong.id);
-    if (currentIndex >= 0) {
-      // Always update the queue with the full library so the index is correct.
-      setQueue(songs, currentSong, "library");
-    }
-  }, [currentSong?.id, songs]);
 
   const handleNext = useCallback(() => {
     const state = usePlayerStore.getState();
@@ -151,103 +105,93 @@ export const usePlayer = () => {
       lastPlayedId.current = null;
       setCurrentSong(nextSong);
       setProgress(0);
-      ignorePositionRef.current = true;
+      ignorePositionUntil.current = Date.now() + 500;
     }
   }, [getNextSong, setCurrentSong, setProgress]);
 
-  const songsRef = useRef(songs);
-  songsRef.current = songs;
-
-  const handleNextRef = useRef(handleNext);
-  handleNextRef.current = handleNext;
-
   useEffect(() => {
-    // Add throttle timer ref
     let lastUpdate = 0;
-    let pendingUpdate: ReturnType<typeof setTimeout> | null = null;
 
     const unsubscribe = playerRepo.current.onPlaybackUpdate(
-      (position, duration) => {
-        if (usePlayerStore.getState().isPlaying && isLoadingRef.current) {
-          isLoadingRef.current = false;
-          ignorePositionRef.current = false;
-          usePlayerStore.getState().setIsLoading(false);
+      (position, duration, backendIsPlaying) => {
+        const store = usePlayerStore.getState();
+
+        // sync play state
+        if (store.isPlaying !== backendIsPlaying) {
+          store.setPlaying(backendIsPlaying);
         }
 
-        // THROTTLE: Only update every 100ms
+        if (Date.now() < ignorePositionUntil.current || isSeekingRef.current) {
+          return;
+        }
         const now = Date.now();
-        if (usePlayerStore.getState().isPlaying && !ignorePositionRef.current) {
-          if (now - lastUpdate >= 100) {
-            // Update immediately
-            lastUpdate = now;
-            setProgress(isNaN(position) ? 0 : position);
-
-            // Clear any pending update
-            if (pendingUpdate) {
-              clearTimeout(pendingUpdate);
-              pendingUpdate = null;
-            }
-          } else if (!pendingUpdate) {
-            // Schedule the last update
-            pendingUpdate = setTimeout(() => {
-              setProgress(isNaN(position) ? 0 : position);
-              lastUpdate = Date.now();
-              pendingUpdate = null;
-            }, 100);
-          }
+        if (now - lastUpdate > 80) {
+          lastUpdate = now;
+          setProgress(isNaN(position) ? 0 : position);
         }
 
+        // song end detection
         if (
           duration > 1 &&
           position >= duration - 1 &&
           !songEndHandled.current
         ) {
           songEndHandled.current = true;
-          const state = usePlayerStore.getState();
-          if (state.repeatMode === 2) {
-            songEndHandled.current = false;
+
+          if (store.repeatMode === 2) {
             playerRepo.current.seek(0);
             playerRepo.current.resume();
             setProgress(0);
+            songEndHandled.current = false;
           } else {
-            handleNextRef.current();
+            handleNext();
           }
         }
       },
     );
-    return () => {
-      if (pendingUpdate) clearTimeout(pendingUpdate);
-      unsubscribe();
-    };
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const syncVolume = async () => {
-      const effectiveVolume = isMuted ? 0 : volume;
-      await playerRepo.current.setVolume(effectiveVolume);
-    };
-    syncVolume();
+    const effectiveVolume = isMuted ? 0 : volume;
+    playerRepo.current.setVolume(effectiveVolume);
   }, [volume, isMuted]);
 
   const togglePlay = async () => {
+    const current = usePlayerStore.getState().isPlaying;
+    const next = !current;
+
+    setPlaying(next);
+
     try {
-      if (isPlaying) {
+      if (current) {
         await playerRepo.current.pause();
       } else {
         await playerRepo.current.resume();
       }
-      togglePlayStore();
     } catch (err) {
-      console.error("Failed to toggle playback:", err);
+      setPlaying(current);
+      console.error(err);
     }
   };
 
-  const setVolume = async (newVolume: number) => {
-    setVolumeStore(newVolume);
-  };
+  const seek = async (position: number) => {
+    isSeekingRef.current = true;
 
-  const toggleMute = async () => {
-    toggleMuteStore();
+    // instant UI update
+    setProgress(position);
+
+    try {
+      await playerRepo.current.seek(position);
+    } catch (err) {
+      console.error("Seek failed:", err);
+    }
+
+    // allow MPV sync again after it settles
+    setTimeout(() => {
+      isSeekingRef.current = false;
+    }, 250);
   };
 
   const nextSong = () => {
@@ -261,24 +205,23 @@ export const usePlayer = () => {
       lastPlayedId.current = null;
       setCurrentSong(prev);
       setProgress(0);
-      ignorePositionRef.current = true;
+      ignorePositionUntil.current = Date.now() + 500;
+      try {
+        playerRepo.current.stop();
+      } catch {}
     }
   };
-
-  const seek = async (position: number) => {
-    await playerRepo.current.seek(position);
-    setProgress(position);
-  };
+  const setVolume = (v: number) => setVolumeStore(v);
+  const toggleMute = () => toggleMuteStore();
 
   return {
     currentSong,
     isPlaying,
-    currentProgress,
-    duration,
+    currentProgress: usePlayerStore.getState().currentProgress,
     volume: isMuted ? 0 : volume,
-    repeatMode,
     isShuffle,
-    isLoading,
+    repeatMode,
+    isLoading: isLoadingRef.current,
     togglePlay,
     setProgress: seek,
     setVolume,

@@ -16,10 +16,12 @@ interface UIStore {
   currentView: CurrentView;
   sidebarCollapsed: boolean;
   libraryView: "list" | "grid";
+  searchQuery: string;
   toggleEQPanel: () => void;
   setCurrentView: (view: CurrentView) => void;
   toggleSidebar: () => void;
   setLibraryView: (view: "list" | "grid") => void;
+  setSearchQuery: (query: string) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -27,6 +29,7 @@ export const useUIStore = create<UIStore>((set) => ({
   currentView: "home",
   sidebarCollapsed: false,
   libraryView: "list",
+  searchQuery: "",
 
   toggleEQPanel: () =>
     set((state) => ({ isEQPanelOpen: !state.isEQPanelOpen })),
@@ -37,4 +40,6 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
   setLibraryView: (view) => set({ libraryView: view }),
+
+  setSearchQuery: (query) => set({ searchQuery: query }),
 }));

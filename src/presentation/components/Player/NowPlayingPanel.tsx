@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useDeferredValue,
-} from "react";
+import React, { useEffect, useRef, useState, useDeferredValue } from "react";
 import { usePlayerContext as usePlayer } from "../../hooks/PlayerContext";
 import { useLibraryStore } from "../../stores/libraryStore";
 import { usePlayerStore } from "../../stores/playerStore";
@@ -37,10 +31,12 @@ function parseLRC(lrc: string): LrcLine[] {
 async function fetchLyrics(
   title: string,
   artist: string,
+  signal?: AbortSignal,
 ): Promise<LrcLine[] | null> {
   try {
     const res = await fetch(
       `https://lrclib.net/api/search?q=${encodeURIComponent(title + " " + artist)}&track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`,
+      { signal },
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -77,7 +73,6 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   // CRITICAL: Defer lyrics updates to prevent UI freeze
   const deferredProgress = useDeferredValue(currentProgress);
 
-  // Lyrics state
   const [lyrics, setLyrics] = useState<LrcLine[] | null>(null);
   const [lyricsStatus, setLyricsStatus] = useState<
     "idle" | "loading" | "found" | "not_found"
@@ -85,31 +80,44 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const lastSongId = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Fetch lyrics when song changes (only when showLyrics=true)
   useEffect(() => {
     if (!showLyrics || !currentSong) return;
-    if (currentSong.id === lastSongId.current) return;
-    lastSongId.current = currentSong.id;
+
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+
     setLyrics(null);
     setActiveIdx(0);
     setLyricsStatus("loading");
 
-    fetchLyrics(currentSong.title, currentSong.artist).then((lines) => {
-      if (lines && lines.length > 0) {
-        setLyrics(lines);
-        setLyricsStatus("found");
-      } else {
-        setLyricsStatus("not_found");
-      }
-    });
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    fetchLyrics(currentSong.title, currentSong.artist, controller.signal)
+      .then((lines) => {
+        if (controller.signal.aborted) return;
+        if (lines && lines.length > 0) {
+          setLyrics(lines);
+          setLyricsStatus("found");
+        } else {
+          setLyricsStatus("not_found");
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setLyricsStatus("not_found");
+        }
+      });
+
+    return () => controller.abort();
   }, [currentSong?.id, showLyrics]);
 
-  // Track active lyric line — useDeferredValue already deprioritises this.
   useEffect(() => {
     if (!lyrics || !currentSong) return;
-    const elapsed = deferredProgress + 0.3;
+    const elapsed = deferredProgress;
     let idx = 0;
     for (let i = 0; i < lyrics.length; i++) {
       if (lyrics[i].time <= elapsed) idx = i;
@@ -118,60 +126,17 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     setActiveIdx(idx);
   }, [deferredProgress, lyrics, currentSong]);
 
-  // Scroll active line to center — one frame delay lets React paint first.
   useEffect(() => {
     const timer = setTimeout(() => {
       lineRefs.current[activeIdx]?.scrollIntoView({
         block: "center",
         behavior: "smooth",
       });
-    }, 16);
+    }, 50);
     return () => clearTimeout(timer);
   }, [activeIdx]);
+  // ── Empty state ────────────────────────────────────────────────────────────
 
-  // ── Queue computation (MUST be before any conditional return) ──
-  const queueSongs = useMemo(() => {
-    if (!currentSong) return [];
-
-    const result: Song[] = [];
-    const currentIndex = songs.findIndex((s) => s.id === currentSong.id);
-
-    // Get songs after current song in library
-    for (
-      let i = currentIndex + 1;
-      i < songs.length && result.length < 12;
-      i++
-    ) {
-      result.push(songs[i]);
-    }
-
-    // Fill remaining slots from library using random picks, no duplicates.
-    if (result.length < 12 && songs.length > 0) {
-      const seen = new Set([currentSong.id, ...result.map((s) => s.id)]);
-      const pool = songs.filter((s) => !seen.has(s.id));
-      // Fisher-Yates shuffle
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
-      for (const song of pool) {
-        if (result.length >= 12) break;
-        result.push(song);
-      }
-    }
-
-    return result;
-  }, [currentSong?.id, songs]);
-
-  // Calculate stats (MUST be before any conditional return)
-  const durationMinutes = currentSong
-    ? parseInt(currentSong.dur?.split(":")[0]) || 0
-    : 0;
-  const totalListenedHours = currentSong
-    ? Math.floor((currentSong.plays * durationMinutes) / 60)
-    : 0;
-
-  // ── Empty state (now after all hooks) ────────────────────────────────────────────
   if (!currentSong) {
     return (
       <div className={showLyrics ? "np-fullscreen" : "now-playing-panel"}>
@@ -194,6 +159,22 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
       </div>
     );
   }
+
+  // ── Queue ──────────────────────────────────────────────────────────────────
+
+  const currentIndex = songs.findIndex((s) => s.id === currentSong.id);
+  const queueSongs: Song[] = [];
+  for (let i = 1; i <= 4; i++) {
+    const nextSong = songs[(currentIndex + i) % songs.length];
+    if (nextSong) {
+      queueSongs.push(nextSong);
+    }
+  }
+
+  const durationMinutes = parseInt(currentSong.dur.split(":")[0]);
+  const totalListenedHours = Math.floor(
+    (currentSong.plays * durationMinutes) / 60,
+  );
 
   // ── Song info column (shared between both modes) ───────────────────────────
 
@@ -259,9 +240,9 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
 
       {/* Tags */}
       <div className="np-tags">
-        <span className="tag genre">{currentSong.genre || "Unknown"}</span>
-        <span className="tag">♩ {currentSong.bpm || "—"} BPM</span>
-        <span className="tag">Key: {currentSong.key || "—"}</span>
+        <span className="tag genre">{currentSong.genre}</span>
+        <span className="tag">♩ {currentSong.bpm} BPM</span>
+        <span className="tag">{currentSong.key}</span>
       </div>
 
       <hr className="divider" />
@@ -269,9 +250,7 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
       {/* Stats */}
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-val">
-            {currentSong.plays?.toLocaleString() || 0}
-          </div>
+          <div className="stat-val">{currentSong.plays.toLocaleString()}</div>
           <div className="stat-lbl">Total Plays</div>
         </div>
         <div className="stat-card">
@@ -287,7 +266,7 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
         <div className="queue-label">Up Next</div>
         {queueSongs.map((song, idx) => (
           <QueueItem
-            key={song.id || idx}
+            key={idx}
             song={song}
             setCurrentSong={setCurrentSong}
             setProgress={setProgress}
@@ -310,30 +289,33 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
       {/* Left: Lyrics */}
       <div className="np-lyrics-col">
         <div className="np-lyrics-header">
-          <span className="np-lyrics-label">Lyrics</span>
+          <span className="np-lyrics-label">
+            {lyricsStatus === "not_found" ? "Visualizer" : "Lyrics"}
+          </span>
           {lyricsStatus === "found" && (
             <span className="np-lyrics-badge">lrclib.net</span>
           )}
         </div>
 
-        <div className="np-lyrics-scroll" ref={scrollRef}>
+        {/* AudioVisualizer lives OUTSIDE the keyed container so it is never
+            remounted on song change. Visibility is toggled via CSS only. */}
+        {lyricsStatus === "not_found" && (
+          <div style={{ flex: "1 1 auto", minHeight: 0 }}>
+            <AudioVisualizer isPlaying={isPlaying} />
+          </div>
+        )}
+
+        {/* Keyed container: remounts on song change to clear stale lyrics */}
+        <div
+          className="np-lyrics-scroll"
+          ref={scrollRef}
+          key={currentSong.id}
+          style={{ display: lyricsStatus === "not_found" ? "none" : undefined }}
+        >
           {lyricsStatus === "loading" && (
             <div className="np-lyrics-status">
               <div className="np-lyrics-spinner" />
               <span>Fetching lyrics…</span>
-            </div>
-          )}
-
-          {lyricsStatus === "not_found" && (
-            <div className="np-lyrics-status">
-              <AudioVisualizer
-                isPlaying={isPlaying}
-                barCount={32}
-                className="audio-visualizer"
-              />
-              <span style={{ marginTop: "20px", color: "var(--text3)" }}>
-                Visualizing your music
-              </span>
             </div>
           )}
 

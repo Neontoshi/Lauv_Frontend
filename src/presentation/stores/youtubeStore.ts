@@ -89,15 +89,14 @@ export const useYouTubeStore = create<YouTubeStore>((set, get) => ({
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const musicQuery = buildMusicQuery(query);
+      // Backend accepts only { query } — no offset
       const raw: YouTubeSearchResult[] = await invoke("youtube_search", {
         query: musicQuery,
-        offset: 0,
       });
       set({
         results: raw.map(toSong),
         isSearching: false,
         lastQuery: musicQuery,
-        offset: 15,
       });
     } catch (e) {
       set({ error: String(e), isSearching: false });
@@ -133,11 +132,12 @@ export const useYouTubeStore = create<YouTubeStore>((set, get) => ({
   ): Promise<string | null> => {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const filePath: string = await invoke("youtube_download", {
+      // Backend expects { videoId, title }
+      const msg: string = await invoke("youtube_download", {
         videoId,
         title,
       });
-      return filePath;
+      return msg;
     } catch (e) {
       console.error("Download failed:", e);
       return null;

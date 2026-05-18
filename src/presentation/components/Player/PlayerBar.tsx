@@ -3,13 +3,13 @@ import { usePlayerContext as usePlayer } from "../../hooks/PlayerContext";
 import VolumeControl from "./VolumeControl";
 import ProgressSlider from "./ProgressSlider";
 import Toast from "../Toast";
+import { usePlayerStore } from "../../stores/playerStore";
 
 const PlayerBar: React.FC = () => {
   const {
     currentSong,
     isPlaying,
     isShuffle,
-    isLoading,
     repeatMode,
     togglePlay,
     nextSong,
@@ -17,7 +17,7 @@ const PlayerBar: React.FC = () => {
     toggleShuffle,
     toggleRepeat,
   } = usePlayer();
-
+  const isLoading = usePlayerStore().isLoading;
   if (!currentSong) {
     return (
       <div

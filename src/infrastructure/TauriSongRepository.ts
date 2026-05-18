@@ -78,7 +78,6 @@ export class TauriSongRepository implements ISongRepository {
   private mapSong = (raw: any): Song => {
     let artworkUrl: string | null = null;
     if (raw.artwork && raw.artwork.length > 0) {
-      console.log("artwork raw type:", typeof raw.artwork, "length:", raw.artwork?.length);
       const bytes = new Uint8Array(raw.artwork);
       const blob = new Blob([bytes], { type: "image/*" });
       artworkUrl = URL.createObjectURL(blob);

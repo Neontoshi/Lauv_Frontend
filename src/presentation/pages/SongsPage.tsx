@@ -8,23 +8,11 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
 const SongsPage: React.FC = () => {
   const { loading, error, reloadSongs } = useLibrary();
-  const { setSearchQuery, setActiveSort } = useLibraryStore();
+  const { setSearchQuery } = useUIStore();
+  const { setActiveSort } = useLibraryStore();
   const { isEQPanelOpen, toggleEQPanel } = useUIStore();
 
   useKeyboardShortcuts();
-
-  useEffect(() => {
-    const searchInput = document.getElementById(
-      "searchInput",
-    ) as HTMLInputElement;
-    if (searchInput) {
-      const handleSearch = (e: Event) => {
-        setSearchQuery((e.target as HTMLInputElement).value);
-      };
-      searchInput.addEventListener("input", handleSearch);
-      return () => searchInput.removeEventListener("input", handleSearch);
-    }
-  }, [setSearchQuery]);
 
   useEffect(() => {
     const sortSelect = document.getElementById(
@@ -57,7 +45,8 @@ const SongsPage: React.FC = () => {
             className="search-input"
             type="text"
             placeholder="Search songs, artists, albums…"
-            id="searchInput"
+            value={useUIStore.getState().searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 

@@ -4,7 +4,9 @@ import { formatTime } from "../../../lib/formatTime";
 import { usePlayerStore } from "../../stores/playerStore";
 
 const ProgressSlider: React.FC = () => {
-  const { currentProgress, setProgress } = usePlayer();
+  const { setProgress } = usePlayer();
+  const currentProgress = usePlayerStore((s) => s.currentProgress); // ✅ reactive
+
   const duration = usePlayerStore((s) => s.duration);
   const progressTrackRef = useRef<HTMLDivElement>(null);
 

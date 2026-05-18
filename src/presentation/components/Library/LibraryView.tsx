@@ -7,17 +7,20 @@ import { useYouTubeStore } from "../../stores/youtubeStore";
 import { GENRES } from "../../../lib/constants";
 import { Song } from "../../../core/entities/Song";
 import { useQueueStore } from "../../stores/queueStore";
+import { useLibraryStore } from "../../stores/libraryStore";
+
+type SearchTab = "library" | "youtube";
 
 const LibraryView: React.FC = () => {
   const {
     songs: localSongs,
     activeGenre,
-    searchQuery,
-    setSearchQuery,
     setActiveGenre,
     setActiveSort,
     loading,
   } = useLibrary();
+  const { searchQuery } = useUIStore();
+  const { setSearchQuery: setLibSearchQuery } = useLibraryStore();
   const { setCurrentSong, setProgress, currentSong } = usePlayerStore();
   const { libraryView, setLibraryView } = useUIStore();
   const { setQueue } = useQueueStore();
@@ -30,15 +33,20 @@ const LibraryView: React.FC = () => {
   } = useYouTubeStore();
 
   const [sortChip, setSortChip] = useState("#");
+  const [activeTab, setActiveTab] = useState<SearchTab>("library");
 
-  // Merge local + YouTube results
-  const allSongs: Song[] = useMemo(() => {
-    if (searchQuery.trim()) {
-      // When searching, merge both sources. Local first, then YouTube.
-      return [...localSongs, ...ytSongs];
+  const isSearching_ = searchQuery.trim().length > 0;
+
+  // Sync searchQuery to library store for local filtering
+  useEffect(() => {
+    setLibSearchQuery(searchQuery);
+  }, [searchQuery]);
+  // Reset tab when search clears
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setActiveTab("library");
     }
-    return localSongs;
-  }, [localSongs, ytSongs, searchQuery]);
+  }, [searchQuery]);
 
   // Trigger YouTube search when query changes
   useEffect(() => {
@@ -46,6 +54,14 @@ const LibraryView: React.FC = () => {
       searchYouTube(searchQuery);
     }
   }, [searchQuery]);
+
+  // Show songs based on active tab
+  const displaySongs: Song[] = useMemo(() => {
+    if (!isSearching_) return localSongs.filter((s) => s.source !== "youtube");
+    if (activeTab === "library")
+      return localSongs.filter((s) => s.source !== "youtube");
+    return ytSongs;
+  }, [localSongs, ytSongs, activeTab, isSearching_]);
 
   // Calculate total duration (local only)
   const totalDuration = localSongs.reduce((acc, song) => {
@@ -57,11 +73,8 @@ const LibraryView: React.FC = () => {
   const totalMinutes = Math.floor((totalDuration % 3600) / 60);
 
   const handlePlaySong = (song: Song) => {
-    if (song.source === "youtube") {
-      setQueue(allSongs, song, "search");
-    } else {
-      setQueue(allSongs, song, "library");
-    }
+    const allSongs = activeTab === "youtube" ? ytSongs : localSongs;
+    setQueue(allSongs, song, activeTab === "youtube" ? "search" : "library");
     setCurrentSong(song);
     setProgress(0);
   };
@@ -75,32 +88,6 @@ const LibraryView: React.FC = () => {
     else if (chip === "Duration") setActiveSort("duration");
     else if (chip === "Plays") setActiveSort("plays");
   };
-
-  useEffect(() => {
-    const sortSelect = document.getElementById(
-      "sortSelect",
-    ) as HTMLSelectElement;
-    if (sortSelect) {
-      const handleSortChange = (e: Event) => {
-        setActiveSort((e.target as HTMLSelectElement).value);
-      };
-      sortSelect.addEventListener("change", handleSortChange);
-      return () => sortSelect.removeEventListener("change", handleSortChange);
-    }
-  }, []);
-
-  useEffect(() => {
-    const searchInput = document.getElementById(
-      "searchInput",
-    ) as HTMLInputElement;
-    if (searchInput) {
-      const handleSearch = (e: Event) => {
-        setSearchQuery((e.target as HTMLInputElement).value);
-      };
-      searchInput.addEventListener("input", handleSearch);
-      return () => searchInput.removeEventListener("input", handleSearch);
-    }
-  }, []);
 
   if (loading) {
     return (
@@ -237,8 +224,59 @@ const LibraryView: React.FC = () => {
         ))}
       </div>
 
+      {/* Search Tabs */}
+      {isSearching_ && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginBottom: "12px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          <button
+            onClick={() => setActiveTab("library")}
+            style={{
+              padding: "8px 24px",
+              background: "transparent",
+              border: "none",
+              borderBottom:
+                activeTab === "library"
+                  ? "2px solid var(--accent)"
+                  : "2px solid transparent",
+              color: activeTab === "library" ? "var(--text)" : "var(--text3)",
+              cursor: "pointer",
+              fontFamily: "'Syne', sans-serif",
+              fontSize: "13px",
+              fontWeight: activeTab === "library" ? 600 : 400,
+            }}
+          >
+            Library ({localSongs.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("youtube")}
+            style={{
+              padding: "8px 24px",
+              background: "transparent",
+              border: "none",
+              borderBottom:
+                activeTab === "youtube"
+                  ? "2px solid var(--accent)"
+                  : "2px solid transparent",
+              color: activeTab === "youtube" ? "var(--text)" : "var(--text3)",
+              cursor: "pointer",
+              fontFamily: "'Syne', sans-serif",
+              fontSize: "13px",
+              fontWeight: activeTab === "youtube" ? 600 : 400,
+            }}
+          >
+            YouTube{ytSongs.length > 0 ? ` (${ytSongs.length})` : ""}
+            {isSearching && !ytSongs.length && " ···"}
+          </button>
+        </div>
+      )}
       {/* Song List */}
-      {allSongs.length === 0 ? (
+      {displaySongs.length === 0 ? (
         <div
           style={{
             padding: "40px",
@@ -247,11 +285,17 @@ const LibraryView: React.FC = () => {
             fontFamily: "'DM Mono', monospace",
           }}
         >
-          {searchQuery.trim() ? "No results found" : "No songs found"}
+          {isSearching_
+            ? activeTab === "youtube"
+              ? isSearching
+                ? "Searching YouTube..."
+                : "No YouTube results"
+              : "No library matches"
+            : "No songs found"}
         </div>
       ) : (
         <>
-          {allSongs.map((song, idx) => (
+          {displaySongs.map((song, idx) => (
             <SongRow
               key={song.id}
               song={song}
@@ -260,7 +304,7 @@ const LibraryView: React.FC = () => {
               onPlay={() => handlePlaySong(song)}
             />
           ))}
-          {searchQuery.trim() && ytSongs.length > 0 && (
+          {activeTab === "youtube" && ytSongs.length > 0 && (
             <div style={{ padding: "16px", textAlign: "center" }}>
               <button
                 onClick={loadMore}
