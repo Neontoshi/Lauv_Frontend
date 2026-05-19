@@ -66,6 +66,9 @@ const SongRow: React.FC<SongRowProps> = ({
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [isDownloaded, setIsDownloaded] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
+  const [showPlaylistMenu, setShowPlaylistMenu] = React.useState(false);
+  const [playlists, setPlaylists] = React.useState<any[]>([]);
+  const playlistMenuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (song.videoId) {
@@ -76,6 +79,27 @@ const SongRow: React.FC<SongRowProps> = ({
       });
     }
   }, [song.videoId]);
+
+  React.useEffect(() => {
+    if (showPlaylistMenu) {
+      import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("get_playlists").then((data: any) => setPlaylists(data || []));
+      });
+    }
+  }, [showPlaylistMenu]);
+
+  React.useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (
+        playlistMenuRef.current &&
+        !playlistMenuRef.current.contains(e.target as Node)
+      ) {
+        setShowPlaylistMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -251,7 +275,16 @@ const SongRow: React.FC<SongRowProps> = ({
             )}
           </div>
         )}
-        <div className="sm-btn" title="Add to playlist">
+
+        <div
+          className="sm-btn"
+          title="Add to playlist"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPlaylistMenu(!showPlaylistMenu);
+          }}
+          style={{ position: "relative" }}
+        >
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -261,7 +294,89 @@ const SongRow: React.FC<SongRowProps> = ({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
+          {showPlaylistMenu && (
+            <div
+              ref={playlistMenuRef}
+              style={{
+                position: "absolute",
+                top: "100%",
+                right: 0,
+                zIndex: 100,
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                padding: "4px",
+                minWidth: "180px",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              }}
+            >
+              {playlists.length === 0 ? (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "11px",
+                    color: "var(--text3)",
+                  }}
+                >
+                  No playlists
+                </div>
+              ) : (
+                playlists.map((pl: any) => (
+                  <div
+                    key={pl.id}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        const { invoke } = await import("@tauri-apps/api/core");
+                        await invoke("add_to_playlist", {
+                          playlistId: pl.id,
+                          songId: song.id,
+                          title: song.title,
+                          artist: song.artist,
+                          album: song.album || "",
+                          durationSecs: song.duration || 0,
+                          thumbnail:
+                            song.artwork ||
+                            (song.videoId
+                              ? `https://i.ytimg.com/vi/${song.videoId}/default.jpg`
+                              : ""),
+                          videoId: song.videoId || undefined,
+                          source: song.source || "local",
+                          path: song.path || "",
+                        });
+                        setShowPlaylistMenu(false);
+                        usePlayerStore
+                          .getState()
+                          .setMessage(`Added to ${pl.name}`);
+                      } catch (err) {
+                        console.error("Failed to add to playlist:", err);
+                      }
+                    }}
+                    style={{
+                      padding: "8px 12px",
+                      cursor: "pointer",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      color: "var(--text2)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "var(--surface2)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    {pl.name}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
+
         <div className="sm-btn" title="More options">
           <svg
             viewBox="0 0 24 24"

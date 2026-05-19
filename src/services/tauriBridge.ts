@@ -153,6 +153,51 @@ export const tauriCommands = {
   }) => handleInvoke("save_liked_song", params),
   getLikedSongsFull: (): Promise<any[]> => handleInvoke("get_liked_songs_full"),
 
+  // Playlists
+  createPlaylist: (
+    name: string,
+    description?: string,
+    emoji?: string,
+    mood?: string,
+    privacy?: string,
+  ): Promise<string> =>
+    handleInvoke("create_playlist", {
+      name,
+      description,
+      emoji,
+      mood,
+      privacy,
+    }),
+  getPlaylists: (): Promise<any[]> => handleInvoke("get_playlists"),
+  addToPlaylist: (
+    playlistId: string,
+    songId: string,
+    title: string,
+    artist: string,
+    album: string,
+    durationSecs: number,
+    thumbnail: string,
+    source: string,
+    path: string,
+    videoId?: string,
+  ): Promise<void> =>
+    handleInvoke("add_to_playlist", {
+      playlistId,
+      songId,
+      title,
+      artist,
+      album,
+      durationSecs,
+      thumbnail,
+      source,
+      path,
+      videoId,
+    }),
+  getPlaylistSongs: (playlistId: string): Promise<any[]> =>
+    handleInvoke("get_playlist_songs", { playlistId }),
+  removeFromPlaylist: (playlistId: string, songId: string): Promise<void> =>
+    handleInvoke("remove_from_playlist", { playlistId, songId }),
+
   checkYtdlp: (): Promise<string> => handleInvoke("check_ytdlp"),
 };
 

@@ -37,9 +37,9 @@ export const useLibrary = () => {
       const currentSongs = useLibraryStore.getState().songs;
       if (!forceRescan && currentSongs.length > 0) {
         const likedFull: any[] = await tauriCommands.getLikedSongsFull();
-        const existingIds = new Set(currentSongs.map((s: any) => s.id));
+        const existingPaths = new Set(currentSongs.map((s: any) => s.path));
         const newSongs = likedFull
-          .filter((s: any) => !existingIds.has(s.id))
+          .filter((s: any) => !existingPaths.has(s.path))
           .map((s: any) => ({
             id: s.id,
             title: s.title,
@@ -60,7 +60,9 @@ export const useLibrary = () => {
           }));
         const updated = currentSongs.map((s: any) => ({
           ...s,
-          liked: likedFull.some((ls: any) => ls.id === s.id),
+          liked: likedFull.some((ls: any) =>
+            s.source === "youtube" ? ls.id === s.id : ls.path === s.path,
+          ),
         }));
         setSongs([...updated, ...newSongs]);
         return;
@@ -73,17 +75,17 @@ export const useLibrary = () => {
       const loadedSongs = forceRescan
         ? await (songRepo as any).rescanLibrary()
         : await songRepo.getAllSongs();
-      const likedIds = await tauriCommands.getLikedSongs();
+      const likedFull: any[] = await tauriCommands.getLikedSongsFull();
       let updated = loadedSongs.map((s: any) => ({
         ...s,
-        liked: likedIds.includes(s.id),
+        liked: likedFull.some((ls: any) =>
+          s.source === "youtube" ? ls.id === s.id : ls.path === s.path,
+        ),
       }));
 
-      // Also merge liked songs from database that aren't local
-      const likedFull: any[] = await tauriCommands.getLikedSongsFull();
-      const existingIds = new Set(updated.map((s: any) => s.id));
+      const existingPaths = new Set(updated.map((s: any) => s.path));
       const newSongs = likedFull
-        .filter((s: any) => !existingIds.has(s.id))
+        .filter((s: any) => !existingPaths.has(s.path))
         .map((s: any) => ({
           id: s.id,
           title: s.title,

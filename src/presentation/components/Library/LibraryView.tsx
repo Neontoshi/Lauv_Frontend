@@ -50,17 +50,16 @@ const LibraryView: React.FC = () => {
   const displaySongs: Song[] = useMemo(() => {
     if (!isSearching_) return localSongs;
     if (activeTab === "library") return localSongs;
-    return ytSongs;
+    // For YouTube tab, merge liked status from library store
+    const librarySongs = useLibraryStore.getState().songs;
+    const likedIds = new Set(
+      librarySongs.filter((s) => s.liked).map((s) => s.id),
+    );
+    return ytSongs.map((s) => ({
+      ...s,
+      liked: likedIds.has(s.id),
+    }));
   }, [localSongs, ytSongs, activeTab, isSearching_]);
-
-  // Calculate total duration (local only)
-  const totalDuration = localSongs.reduce((acc, song) => {
-    const parts = song.dur.split(":");
-    return acc + parseInt(parts[0]) * 60 + parseInt(parts[1]);
-  }, 0);
-
-  const totalHours = Math.floor(totalDuration / 3600);
-  const totalMinutes = Math.floor((totalDuration % 3600) / 60);
 
   const handlePlaySong = (song: Song) => {
     const combined = [...localSongs, ...ytSongs];
@@ -143,7 +142,9 @@ const LibraryView: React.FC = () => {
           <div>
             <div className="section-title">Your Library</div>
             <div className="section-sub">
-              {localSongs.length} songs · {totalHours}h {totalMinutes}m
+              {isSearching_
+                ? `${localSongs.length + ytSongs.length} results`
+                : `${localSongs.length} songs`}
               {isSearching && (
                 <span style={{ marginLeft: 8, color: "var(--accent)" }}>
                   · Searching YouTube...
