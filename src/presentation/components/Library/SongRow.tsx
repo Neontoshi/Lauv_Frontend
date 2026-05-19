@@ -3,6 +3,48 @@ import { Song } from "../../../core/entities/Song";
 import { usePlayerStore } from "../../stores/playerStore";
 import { useLibraryStore } from "../../stores/libraryStore";
 
+const PlayingBars = () => (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "flex-end",
+      gap: "2px",
+      height: "14px",
+    }}
+  >
+    <div
+      style={{
+        width: "3px",
+        background: "var(--accent)",
+        borderRadius: "1px",
+        animation: "barBounce 0.8s ease-in-out infinite",
+        animationDelay: "0s",
+        height: "14px",
+      }}
+    />
+    <div
+      style={{
+        width: "3px",
+        background: "var(--accent)",
+        borderRadius: "1px",
+        animation: "barBounce 0.8s ease-in-out infinite",
+        animationDelay: "0.2s",
+        height: "14px",
+      }}
+    />
+    <div
+      style={{
+        width: "3px",
+        background: "var(--accent)",
+        borderRadius: "1px",
+        animation: "barBounce 0.8s ease-in-out infinite",
+        animationDelay: "0.4s",
+        height: "14px",
+      }}
+    />
+  </div>
+);
+
 interface SongRowProps {
   song: Song;
   index: number;
@@ -18,6 +60,9 @@ const SongRow: React.FC<SongRowProps> = ({
 }) => {
   const { toggleLike } = useLibraryStore();
   const { isPlaying } = usePlayerStore();
+  const isLoading = usePlayerStore((s) => s.isLoading);
+  const currentSongId = usePlayerStore((s) => s.currentSong?.id);
+  const isThisSongLoading = isLoading && currentSongId === song.id;
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [isDownloaded, setIsDownloaded] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
@@ -57,14 +102,6 @@ const SongRow: React.FC<SongRowProps> = ({
       setIsDownloading(false);
     }
   };
-
-  const PlayingBars = () => (
-    <div className="bars">
-      <div className="bar"></div>
-      <div className="bar"></div>
-      <div className="bar"></div>
-    </div>
-  );
 
   const isYouTube = song.source === "youtube";
 
@@ -111,7 +148,25 @@ const SongRow: React.FC<SongRowProps> = ({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="song-num">
-        {isCurrent && isPlaying ? (
+        {isThisSongLoading ? (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            width="14"
+            height="14"
+            className="spinner"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+              strokeDasharray="63"
+              strokeDashoffset="21"
+            />
+          </svg>
+        ) : isCurrent && isPlaying ? (
           <PlayingBars />
         ) : isHovered ? (
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">

@@ -11,12 +11,13 @@ interface AudioVisualizerProps {
 
 // ── Shared canvas logic extracted so both inline and fullscreen
 // instances can reuse the same setup pattern ────────────────────
-
 function useVisualizer(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   freqDataRef: React.MutableRefObject<Uint8Array>,
-  _isPlaying: boolean,
+  isPlaying: boolean,
 ) {
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
   const visualizerRef = useRef<any>(null);
   const [presetName, setPresetName] = useState("");
   const presets = butterchurnPresets.getPresets();
@@ -80,7 +81,7 @@ function useVisualizer(
 
     let animId: number;
     const render = () => {
-      viz.render();
+      if (isPlayingRef.current) viz.render();
       animId = requestAnimationFrame(render);
     };
     animId = requestAnimationFrame(render);
@@ -246,11 +247,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       if (unlisten) unlisten();
     };
   }, []);
-
-  // Clear freq data when paused so visualizer goes idle
-  useEffect(() => {
-    if (!isPlaying) freqDataRef.current = new Uint8Array(512).fill(0);
-  }, [isPlaying]);
 
   return (
     <>

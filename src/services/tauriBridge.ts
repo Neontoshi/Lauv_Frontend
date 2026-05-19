@@ -113,6 +113,46 @@ export const tauriCommands = {
   resolveYoutubeUrl: (videoId: string): Promise<string> =>
     handleInvoke("resolve_youtube_url", { videoId }),
 
+  getSetting: (key: string): Promise<string | null> =>
+    handleInvoke("get_setting", { key }),
+  setSetting: (key: string, value: string): Promise<void> =>
+    handleInvoke("set_setting", { key, value }),
+
+  fetchListenbrainzStats: (user: string): Promise<string> =>
+    handleInvoke("fetch_listenbrainz_stats", { user }),
+
+  savePlayHistory: (params: {
+    songId: string;
+    title: string;
+    artist: string;
+    album: string;
+    durationSecs: number;
+    thumbnail: string;
+    videoId?: string;
+    source: string;
+    path?: string;
+  }) => handleInvoke("save_play_history", params),
+
+  getRecentlyPlayed: (limit?: number) =>
+    handleInvoke("get_recently_played", { limit }),
+
+  getLikedSongs: (): Promise<string[]> => handleInvoke("get_liked_songs"),
+  toggleLike: (trackId: string): Promise<boolean> =>
+    handleInvoke("toggle_like", { trackId }),
+
+  saveLikedSong: (params: {
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    durationSecs: number;
+    thumbnail: string;
+    videoId?: string;
+    source: string;
+    path: string;
+  }) => handleInvoke("save_liked_song", params),
+  getLikedSongsFull: (): Promise<any[]> => handleInvoke("get_liked_songs_full"),
+
   checkYtdlp: (): Promise<string> => handleInvoke("check_ytdlp"),
 };
 
@@ -123,12 +163,14 @@ export const tauriEvents = {
     callback: (data: {
       position: number;
       duration: number;
+      track_id: number;
       is_playing: boolean;
     }) => void,
   ): (() => void) => {
     const unlisten = listen<{
       position: number;
       duration: number;
+      track_id: number;
       is_playing: boolean;
     }>("playback-update", (event) => callback(event.payload));
     // Return cleanup function

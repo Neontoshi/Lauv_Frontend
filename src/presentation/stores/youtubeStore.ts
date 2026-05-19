@@ -59,19 +59,6 @@ function toSong(r: YouTubeSearchResult): Song {
   };
 }
 
-function buildMusicQuery(query: string): string {
-  const hasIntent = /official|audio|video|lyrics|live|remix|ft\.|feat\./i.test(
-    query,
-  );
-  const looksLikeArtist =
-    query.trim().split(" ").length <= 2 && !/[-–]/.test(query);
-  return hasIntent
-    ? query
-    : looksLikeArtist
-      ? `${query} songs`
-      : `${query} official audio`;
-}
-
 export const useYouTubeStore = create<YouTubeStore>((set, get) => ({
   results: [],
   isSearching: false,
@@ -88,15 +75,13 @@ export const useYouTubeStore = create<YouTubeStore>((set, get) => ({
     set({ isSearching: true, error: null });
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const musicQuery = buildMusicQuery(query);
-      // Backend accepts only { query } — no offset
       const raw: YouTubeSearchResult[] = await invoke("youtube_search", {
-        query: musicQuery,
+        query: query.trim(),
       });
       set({
         results: raw.map(toSong),
         isSearching: false,
-        lastQuery: musicQuery,
+        lastQuery: query.trim(),
       });
     } catch (e) {
       set({ error: String(e), isSearching: false });
@@ -132,7 +117,6 @@ export const useYouTubeStore = create<YouTubeStore>((set, get) => ({
   ): Promise<string | null> => {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      // Backend expects { videoId, title }
       const msg: string = await invoke("youtube_download", {
         videoId,
         title,

@@ -1,7 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { Song } from "../../core/entities/Song";
+import { tauriCommands } from "../../services/tauriBridge";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -232,6 +233,40 @@ const HomePage: React.FC = () => {
       .map(([genre, ss]) => ({ genre, songs: shuffle(ss).slice(0, 6) }));
   }, [songs]);
 
+  const [topArtists, setTopArtists] = useState<
+    { name: string; plays: number }[]
+  >([]);
+
+  useEffect(() => {
+    tauriCommands.getSetting("listenbrainz_user").then((user) => {
+      if (user) {
+        tauriCommands
+          .fetchListenbrainzStats(user)
+          .then((json) => {
+            const data = JSON.parse(json);
+            const artists =
+              data.payload?.artists?.map((a: any) => ({
+                name: a.artist_name,
+                plays: a.listen_count,
+              })) || [];
+            setTopArtists(artists);
+          })
+          .catch(() => {});
+      }
+    });
+  }, [songs]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<any[]>([]);
+
+  useEffect(() => {
+    tauriCommands
+      .getRecentlyPlayed(8)
+      .then((data) => {
+        console.log("[HOME] Recently played data:", data);
+        setRecentlyPlayed((data as any[]) || []);
+      })
+      .catch((err) => console.error("[HOME] Recently played error:", err));
+  }, [songs]);
+
   const stats = useMemo(
     () => ({
       total: songs.length,
@@ -400,6 +435,104 @@ const HomePage: React.FC = () => {
           </div>
         </div>
       ))}
+
+      {/* ── Recently Played ── */}
+      {recentlyPlayed.length > 0 && (
+        <div className="home-section">
+          <SectionHead title="Recently Played" sub="Your listening history" />
+          <div className="home-two-col">
+            {recentlyPlayed.map((entry: any) => (
+              <div
+                key={entry.id}
+                className="home-row"
+                onClick={() => {
+                  const song: Song = {
+                    id: entry.track_id,
+                    title: entry.title,
+                    artist: entry.artist,
+                    album: entry.album,
+                    duration: entry.duration_secs,
+                    genre: null,
+                    year: null,
+                    track_number: null,
+                    artwork: entry.thumbnail || null,
+                    source: entry.source as any,
+                    path: entry.path || "",
+                    videoId: entry.video_id || undefined,
+                    dur: "",
+                    emoji: "🎵",
+                    grad: "linear-gradient(135deg, #7c6af5, #4a3fd4)",
+                    bpm: 0,
+                    key: "—",
+                    plays: 0,
+                    liked: false,
+                  };
+                  playSong(song);
+                }}
+              >
+                <SongArt
+                  song={
+                    {
+                      artwork: entry.thumbnail,
+                      grad: "linear-gradient(135deg, #7c6af5, #4a3fd4)",
+                      emoji: "🎵",
+                      videoId: entry.video_id,
+                    } as any
+                  }
+                  size={40}
+                />
+                <div className="home-row-info">
+                  <div className="home-row-title">{entry.title}</div>
+                  <div className="home-row-artist">{entry.artist}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── ListenBrainz ── */}
+      {topArtists.length > 0 && (
+        <div className="home-section">
+          <SectionHead
+            title="This Week on ListenBrainz"
+            sub="Your top artists"
+          />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            {topArtists.map((a, i) => (
+              <div
+                key={i}
+                style={{
+                  background: "var(--surface2)",
+                  borderRadius: "var(--radius)",
+                  padding: "16px 20px",
+                  textAlign: "center",
+                  minWidth: "120px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    fontFamily: "'Syne', sans-serif",
+                  }}
+                >
+                  {a.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text3)",
+                    marginTop: "4px",
+                  }}
+                >
+                  {a.plays} plays
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ height: 40 }} />
     </div>

@@ -29,18 +29,25 @@ export const usePlayer = () => {
   const isLoadingRef = useRef(false);
   const isSeekingRef = useRef(false);
   const ignorePositionUntil = useRef(0);
+  const currentTrackIdRef = useRef(0);
 
   const lastPlayedId = useRef<string | null>(null);
   const songEndHandled = useRef(false);
   const streamingVideoId = useRef<string | null>(null);
+  const scrobbledRef = useRef(false);
+  const urlCache = useRef<Map<string, { url: string; expires: number }>>(
+    new Map(),
+  );
 
   const playSong = useCallback(async (song: typeof currentSong) => {
+    currentTrackIdRef.current += 1;
     if (!song) return;
     if (song.id === lastPlayedId.current) return;
     if (song.id === pendingPlayId.current) return;
     if (song.videoId && streamingVideoId.current === song.videoId) return;
 
     playerRepo.current.reset();
+    scrobbledRef.current = false;
 
     const wasPaused = !usePlayerStore.getState().isPlaying;
 
@@ -53,21 +60,40 @@ export const usePlayer = () => {
 
     songEndHandled.current = false;
 
+    const { setDuration } = usePlayerStore.getState();
+
     setProgress(0);
+    setDuration(0);
+    songEndHandled.current = false;
+    streamingVideoId.current = song.videoId ?? null;
+
     try {
       await playerRepo.current.stop();
     } catch {}
+
     ignorePositionUntil.current = Date.now() + 500;
 
-    const { setDuration } = usePlayerStore.getState();
-    setDuration(song.duration || 0);
-
+    if (song.duration && song.duration > 0) {
+      setDuration(song.duration);
+    }
     try {
       isLoadingRef.current = true;
       usePlayerStore.getState().setIsLoading(true);
 
       if (song.source === "youtube" && song.videoId) {
-        const directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
+        let directUrl: string;
+        const cached = urlCache.current.get(song.videoId);
+
+        if (cached && Date.now() < cached.expires) {
+          directUrl = cached.url;
+        } else {
+          directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
+          urlCache.current.set(song.videoId, {
+            url: directUrl,
+            expires: Date.now() + 5 * 60 * 60 * 1000,
+          });
+        }
+
         await playerRepo.current.play({
           ...song,
           path: directUrl,
@@ -80,7 +106,24 @@ export const usePlayer = () => {
       if (wasPaused) {
         await playerRepo.current.pause();
       }
-      ignorePositionUntil.current = 0;
+
+      tauriCommands
+        .savePlayHistory({
+          songId: song.id,
+          title: song.title,
+          artist: song.artist,
+          album: song.album || "",
+          durationSecs: song.duration || 0,
+          thumbnail:
+            song.artwork ||
+            (song.videoId
+              ? `https://i.ytimg.com/vi/${song.videoId}/default.jpg`
+              : ""),
+          videoId: song.videoId || undefined,
+          source: song.source || "local",
+          path: song.path || "",
+        })
+        .catch(() => {});
     } catch (err) {
       console.error("Failed to play song:", err);
       streamingVideoId.current = null;
@@ -100,11 +143,13 @@ export const usePlayer = () => {
   const handleNext = useCallback(() => {
     const state = usePlayerStore.getState();
     const nextSong = getNextSong(state.isShuffle, state.repeatMode);
+    const { setDuration } = usePlayerStore.getState();
 
     if (nextSong) {
       lastPlayedId.current = null;
       setCurrentSong(nextSong);
       setProgress(0);
+      setDuration(0);
       ignorePositionUntil.current = Date.now() + 500;
     }
   }, [getNextSong, setCurrentSong, setProgress]);
@@ -113,24 +158,68 @@ export const usePlayer = () => {
     let lastUpdate = 0;
 
     const unsubscribe = playerRepo.current.onPlaybackUpdate(
-      (position, duration, backendIsPlaying) => {
+      (position, duration, backendIsPlaying, eventTrackId) => {
+        if (eventTrackId !== currentTrackIdRef.current) {
+          return;
+        }
         const store = usePlayerStore.getState();
 
-        // sync play state
         if (store.isPlaying !== backendIsPlaying) {
           store.setPlaying(backendIsPlaying);
         }
 
-        if (Date.now() < ignorePositionUntil.current || isSeekingRef.current) {
+        if (Date.now() < ignorePositionUntil.current) {
+          if (position > 0 || duration > 0) {
+            ignorePositionUntil.current = 0;
+          } else {
+            return;
+          }
+        }
+
+        if (isSeekingRef.current) {
           return;
         }
         const now = Date.now();
         if (now - lastUpdate > 80) {
           lastUpdate = now;
           setProgress(isNaN(position) ? 0 : position);
+
+          if (
+            !scrobbledRef.current &&
+            duration > 0 &&
+            position >= Math.min(duration / 2, 240)
+          ) {
+            scrobbledRef.current = true;
+            const song = usePlayerStore.getState().currentSong;
+            if (song) {
+              tauriCommands.getSetting("listenbrainz_token").then((token) => {
+                if (token) {
+                  fetch("https://api.listenbrainz.org/1/submit-listens", {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Token ${token}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      listen_type: "single",
+                      payload: [
+                        {
+                          listened_at: Math.floor(Date.now() / 1000),
+                          track_metadata: {
+                            artist_name: song.artist,
+                            track_name: song.title,
+                            release_name: song.album || undefined,
+                          },
+                        },
+                      ],
+                    }),
+                  }).catch(() => {});
+                }
+              });
+            }
+          }
         }
 
-        // song end detection
         if (
           duration > 1 &&
           position >= duration - 1 &&
@@ -178,8 +267,6 @@ export const usePlayer = () => {
 
   const seek = async (position: number) => {
     isSeekingRef.current = true;
-
-    // instant UI update
     setProgress(position);
 
     try {
@@ -188,7 +275,6 @@ export const usePlayer = () => {
       console.error("Seek failed:", err);
     }
 
-    // allow MPV sync again after it settles
     setTimeout(() => {
       isSeekingRef.current = false;
     }, 250);
@@ -205,7 +291,7 @@ export const usePlayer = () => {
       lastPlayedId.current = null;
       setCurrentSong(prev);
       setProgress(0);
-      ignorePositionUntil.current = Date.now() + 500;
+      ignorePositionUntil.current = Number.MAX_SAFE_INTEGER;
       try {
         playerRepo.current.stop();
       } catch {}

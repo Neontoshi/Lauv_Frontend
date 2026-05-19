@@ -73,7 +73,11 @@ const SettingsIcon = () => (
 );
 // ========== END ICONS ==========
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  className?: string;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ className }) => {
   const { songs } = useLibraryStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,7 +103,7 @@ const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${className || ""}`}>
       <div className="logo">
         <div className="logo-text">LauvPlayer</div>
         <div className="logo-sub">Music</div>

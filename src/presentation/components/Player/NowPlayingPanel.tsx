@@ -4,6 +4,7 @@ import { useLibraryStore } from "../../stores/libraryStore";
 import { usePlayerStore } from "../../stores/playerStore";
 import { Song } from "../../../core/entities/Song";
 import AudioVisualizer from "../AudioVisualizer";
+import { useQueueStore } from "../../stores/queueStore";
 
 // ── LRC types & helpers ───────────────────────────────────────────────────────
 
@@ -67,8 +68,9 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   showLyrics = false,
 }) => {
   const { currentSong, currentProgress, isPlaying } = usePlayer();
-  const { toggleLike, songs } = useLibraryStore();
+  const { toggleLike } = useLibraryStore();
   const { setCurrentSong, setProgress } = usePlayerStore();
+  const { queue, currentIndex } = useQueueStore();
 
   // CRITICAL: Defer lyrics updates to prevent UI freeze
   const deferredProgress = useDeferredValue(currentProgress);
@@ -162,20 +164,7 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
 
   // ── Queue ──────────────────────────────────────────────────────────────────
 
-  const currentIndex = songs.findIndex((s) => s.id === currentSong.id);
-  const queueSongs: Song[] = [];
-  for (let i = 1; i <= 4; i++) {
-    const nextSong = songs[(currentIndex + i) % songs.length];
-    if (nextSong) {
-      queueSongs.push(nextSong);
-    }
-  }
-
-  const durationMinutes = parseInt(currentSong.dur.split(":")[0]);
-  const totalListenedHours = Math.floor(
-    (currentSong.plays * durationMinutes) / 60,
-  );
-
+  const queueSongs = queue.slice(currentIndex + 1, currentIndex + 15);
   // ── Song info column (shared between both modes) ───────────────────────────
 
   const songInfoCol = (
@@ -238,32 +227,10 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
         </button>
       </div>
 
-      {/* Tags */}
-      <div className="np-tags">
-        <span className="tag genre">{currentSong.genre}</span>
-        <span className="tag">♩ {currentSong.bpm} BPM</span>
-        <span className="tag">{currentSong.key}</span>
-      </div>
-
-      <hr className="divider" />
-
-      {/* Stats */}
-      <div className="stats-row">
-        <div className="stat-card">
-          <div className="stat-val">{currentSong.plays.toLocaleString()}</div>
-          <div className="stat-lbl">Total Plays</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-val">{totalListenedHours}h</div>
-          <div className="stat-lbl">Listened</div>
-        </div>
-      </div>
-
-      <hr className="divider" />
-
       {/* Queue */}
       <div className="queue-next">
         <div className="queue-label">Up Next</div>
+        <hr className="divider" />
         {queueSongs.map((song, idx) => (
           <QueueItem
             key={idx}

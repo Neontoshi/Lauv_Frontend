@@ -12,6 +12,11 @@ export interface IPlayerRepository {
   getDuration(): Promise<number>;
   reset(): void;
   onPlaybackUpdate(
-    callback: (position: number, duration: number, isPlaying: boolean) => void,
+    callback: (
+      position: number,
+      duration: number,
+      isPlaying: boolean,
+      trackId: number,
+    ) => void,
   ): () => void;
 }

@@ -50,10 +50,15 @@ export class TauriPlayerRepository implements IPlayerRepository {
   }
 
   onPlaybackUpdate(
-    callback: (position: number, duration: number, isPlaying: boolean) => void,
+    callback: (
+      position: number,
+      duration: number,
+      isPlaying: boolean,
+      trackId: number,
+    ) => void,
   ): () => void {
     return tauriEvents.onPlaybackUpdate((data) => {
-      callback(data.position, data.duration, data.is_playing);
+      callback(data.position, data.duration, data.is_playing, data.track_id);
     });
   }
 }

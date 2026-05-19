@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../Sidebar/Sidebar";
 import PlayerBar from "../Player/PlayerBar";
 
 const Layout: React.FC = () => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div
       style={{
@@ -14,7 +16,11 @@ const Layout: React.FC = () => {
       }}
     >
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <Sidebar />
+        <Sidebar className={sidebarOpen ? "sidebar--open" : ""} />
+        <div
+          className={`sidebar-backdrop ${sidebarOpen ? "sidebar-backdrop--visible" : ""}`}
+          onClick={() => setSidebarOpen(false)}
+        />
         <div className="main">
           <Outlet />
         </div>
