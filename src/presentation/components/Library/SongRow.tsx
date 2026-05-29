@@ -52,18 +52,15 @@ const SongRow: React.FC<SongRowProps> = ({
   const setTriggerReload = useLibraryStore((s) => s.setTriggerReload);
 
   // FIX #12: Consolidate all playerStore reads into one selector to reduce re-renders
-  const { isPlaying, isLoading, currentSongId, setMessage, setError } =
-    usePlayerStore((s) => ({
-      isPlaying: s.isPlaying,
-      isLoading: s.isLoading,
-      currentSongId: s.currentSong?.id,
-      setMessage: s.setMessage,
-      setError: s.setError,
-    }));
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const isLoading = usePlayerStore((s) => s.isLoading);
+  const currentSongId = usePlayerStore((s) => s.currentSong?.id);
+  const setMessage = usePlayerStore((s) => s.setMessage);
+  const setError = usePlayerStore((s) => s.setError);
 
   // FIX #7: Only show spinner if THIS song is loading
-  const isThisSongLoading = isLoading && currentSongId === song.id;
-
+  const isThisSongLoading =
+    isLoading && currentSongId === song.id && !isPlaying;
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [isDownloaded, setIsDownloaded] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);

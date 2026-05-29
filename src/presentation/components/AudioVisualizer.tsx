@@ -9,8 +9,7 @@ interface AudioVisualizerProps {
   className?: string;
 }
 
-// ── Shared canvas logic extracted so both inline and fullscreen
-// instances can reuse the same setup pattern ────────────────────
+// ── Shared canvas logic ──────────────────────────────────────────
 function useVisualizer(
   canvasRef: React.RefObject<HTMLCanvasElement>,
   freqDataRef: React.MutableRefObject<Uint8Array>,
@@ -19,6 +18,8 @@ function useVisualizer(
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
   const visualizerRef = useRef<any>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const animIdRef = useRef<number>(0);
   const [presetName, setPresetName] = useState("");
   const presets = butterchurnPresets.getPresets();
   const presetNames = Object.keys(presets);
@@ -34,7 +35,10 @@ function useVisualizer(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // 🔥 FIX #12: Store AudioContext in ref for proper cleanup
     const audioCtx = new AudioContext();
+    audioCtxRef.current = audioCtx;
+
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024;
 
@@ -79,24 +83,28 @@ function useVisualizer(
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
 
-    let animId: number;
     const render = () => {
       if (isPlayingRef.current) viz.render();
-      animId = requestAnimationFrame(render);
+      animIdRef.current = requestAnimationFrame(render);
     };
-    animId = requestAnimationFrame(render);
+    animIdRef.current = requestAnimationFrame(render);
 
+    // 🔥 FIX #12: Proper cleanup - close AudioContext, cancel animation, disconnect observer
     return () => {
-      cancelAnimationFrame(animId);
+      cancelAnimationFrame(animIdRef.current);
       observer.disconnect();
-      audioCtx.close();
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      visualizerRef.current = null;
     };
   }, []);
 
   return { presetName, loadRandomPreset };
 }
 
-// ── Overlay buttons (shared between inline and fullscreen) ──────
+// ── Overlay controls ────────────────────────────────────────────
 
 const OverlayControls: React.FC<{
   presetName: string;
@@ -162,7 +170,7 @@ const OverlayControls: React.FC<{
   );
 };
 
-// ── Fullscreen portal — completely separate canvas ──────────────
+// ── Fullscreen portal ────────────────────────────────────────────
 
 const FullscreenVisualizer: React.FC<{
   freqDataRef: React.MutableRefObject<Uint8Array>;
@@ -223,6 +231,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const freqDataRef = useRef<Uint8Array>(new Uint8Array(512).fill(0));
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const unlistenRef = useRef<(() => void) | null>(null);
 
   const { presetName, loadRandomPreset } = useVisualizer(
     canvasRef,
@@ -232,8 +241,9 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 
   // Listen for audio frequency data from Tauri backend
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    let cancelled = false;
     listen<number[]>("audio-frequencies", (event) => {
+      if (cancelled) return;
       const payload = event.payload;
       if (!payload?.length) return;
       const arr = new Uint8Array(512);
@@ -242,15 +252,23 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         arr[i] = Math.min(255, Math.round((payload[fi] || 0) * 255));
       }
       freqDataRef.current = arr;
-    }).then((u) => (unlisten = u));
+    }).then((u) => {
+      if (!cancelled) unlistenRef.current = u;
+    });
+
+    // 🔥 FIX #12: Clean up event listener on unmount
     return () => {
-      if (unlisten) unlisten();
+      cancelled = true;
+      if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+      }
     };
   }, []);
 
   return (
     <>
-      {/* Inline visualizer — always stays in the React tree */}
+      {/* Inline visualizer */}
       <div
         style={{
           position: "relative",
@@ -278,7 +296,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
         />
       </div>
 
-      {/* Fullscreen overlay — portal into body, separate canvas instance */}
+      {/* Fullscreen overlay */}
       {isFullscreen && (
         <FullscreenVisualizer
           freqDataRef={freqDataRef}

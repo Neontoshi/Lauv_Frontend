@@ -34,7 +34,10 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   isLoading: false,
   error: null,
   message: null,
-  setIsLoading: (loading) => set({ isLoading: loading }),
+  setIsLoading: (loading) => {
+    console.log("STORE isLoading:", loading);
+    set({ isLoading: loading });
+  },
   setError: (error) => set({ error }),
   setMessage: (message) => set({ message }),
 

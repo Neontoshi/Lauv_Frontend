@@ -72,7 +72,6 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   const { setCurrentSong, setProgress } = usePlayerStore();
   const { queue, currentIndex } = useQueueStore();
 
-  // CRITICAL: Defer lyrics updates to prevent UI freeze
   const deferredProgress = useDeferredValue(currentProgress);
 
   const [lyrics, setLyrics] = useState<LrcLine[] | null>(null);
@@ -84,11 +83,14 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
+  // 🔥 FIX #11: Proper AbortController cleanup on every dependency change
   useEffect(() => {
     if (!showLyrics || !currentSong) return;
 
+    // Abort any in-flight request
     if (abortRef.current) {
       abortRef.current.abort();
+      abortRef.current = null;
     }
 
     setLyrics(null);
@@ -100,7 +102,9 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
 
     fetchLyrics(currentSong.title, currentSong.artist, controller.signal)
       .then((lines) => {
-        if (controller.signal.aborted) return;
+        // 🔥 FIX #11: Check both aborted AND if this is still the current controller
+        if (controller.signal.aborted || abortRef.current !== controller)
+          return;
         if (lines && lines.length > 0) {
           setLyrics(lines);
           setLyricsStatus("found");
@@ -109,12 +113,18 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && abortRef.current === controller) {
           setLyricsStatus("not_found");
         }
       });
 
-    return () => controller.abort();
+    // 🔥 FIX #11: Cleanup function always aborts the current controller
+    return () => {
+      controller.abort();
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    };
   }, [currentSong?.id, showLyrics]);
 
   useEffect(() => {
@@ -137,6 +147,7 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     }, 50);
     return () => clearTimeout(timer);
   }, [activeIdx]);
+
   // ── Empty state ────────────────────────────────────────────────────────────
 
   if (!currentSong) {
@@ -165,6 +176,7 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
   // ── Queue ──────────────────────────────────────────────────────────────────
 
   const queueSongs = queue.slice(currentIndex + 1, currentIndex + 15);
+
   // ── Song info column (shared between both modes) ───────────────────────────
 
   const songInfoCol = (
@@ -264,15 +276,12 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
           )}
         </div>
 
-        {/* AudioVisualizer lives OUTSIDE the keyed container so it is never
-            remounted on song change. Visibility is toggled via CSS only. */}
         {lyricsStatus === "not_found" && (
           <div style={{ flex: "1 1 auto", minHeight: 0 }}>
             <AudioVisualizer isPlaying={isPlaying} />
           </div>
         )}
 
-        {/* Keyed container: remounts on song change to clear stale lyrics */}
         <div
           className="np-lyrics-scroll"
           ref={scrollRef}

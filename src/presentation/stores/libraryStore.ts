@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { Song } from "../../core/entities/Song";
 import { useYouTubeStore } from "./youtubeStore";
-import { tauriCommands } from "../../services/tauriBridge";
 
 interface LibraryStore {
   songs: Song[];

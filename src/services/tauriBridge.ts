@@ -6,21 +6,34 @@ export class TauriError extends Error {
   constructor(
     message: string,
     public code?: string,
+    public details?: string,
   ) {
     super(message);
     this.name = "TauriError";
   }
 }
 
+// 🔥 FIX #18: Better error handling - preserve error details from backend
 const handleInvoke = async <T>(command: string, args?: any): Promise<T> => {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    console.error(`Failed to invoke ${command}:`, error);
-    throw new TauriError(
-      typeof error === "string" ? error : "Unknown error occurred",
-      "INVOKE_ERROR",
-    );
+    const errorMessage =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "Unknown error occurred";
+
+    const errorDetails = error instanceof Error ? error.stack : undefined;
+
+    console.error(`[TauriBridge] Failed to invoke "${command}":`, {
+      error: errorMessage,
+      args: args ? JSON.stringify(args).slice(0, 200) : undefined,
+      stack: errorDetails?.split("\n").slice(0, 3).join("\n"),
+    });
+
+    throw new TauriError(errorMessage, "INVOKE_ERROR", errorDetails);
   }
 };
 

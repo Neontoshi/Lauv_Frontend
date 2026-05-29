@@ -12,8 +12,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function usePlayerContext() {
+export function usePlayerContext(): PlayerContextType {
   const ctx = useContext(PlayerContext);
-  if (!ctx) throw new Error("usePlayerContext must be inside PlayerProvider");
+  if (!ctx) {
+    console.warn(
+      "[PlayerContext] usePlayerContext used outside PlayerProvider. " +
+        "Returning fallback values.",
+    );
+
+    // 🔥 FIX: async functions must return Promise<void>
+    const noop = () => {};
+    const noopAsync = async () => {};
+
+    return {
+      currentSong: null,
+      isPlaying: false,
+      currentProgress: 0,
+      volume: 0,
+      isShuffle: false,
+      repeatMode: 0 as const,
+      isLoading: false,
+      togglePlay: noopAsync,
+      setProgress: async (_position: number) => {},
+      setVolume: noop,
+      toggleMute: noop,
+      toggleShuffle: noop,
+      toggleRepeat: noop,
+      nextSong: noop,
+      prevSong: noop,
+    };
+  }
   return ctx;
 }

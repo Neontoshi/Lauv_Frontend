@@ -14,6 +14,7 @@ export const usePlayer = () => {
     isMuted,
     isShuffle,
     repeatMode,
+    isLoading,
     setCurrentSong,
     setProgress,
     setPlaying,
@@ -35,77 +36,76 @@ export const usePlayer = () => {
   const songEndHandled = useRef(false);
   const streamingVideoId = useRef<string | null>(null);
   const scrobbledRef = useRef(false);
-  const urlCache = useRef<Map<string, { url: string; expires: number }>>(
-    new Map(),
-  );
 
+  // 🔥 FIX #6: Play lock to prevent race conditions
+  const playLockRef = useRef(false);
+  const urlCache = useRef<Map<string, string>>(new Map());
   const playSong = useCallback(async (song: typeof currentSong) => {
+    if (playLockRef.current) {
+      console.debug("[usePlayer] Play locked, skipping duplicate call");
+      return;
+    }
+
     currentTrackIdRef.current += 1;
     if (!song) return;
     if (song.id === lastPlayedId.current) return;
     if (song.id === pendingPlayId.current) return;
     if (song.videoId && streamingVideoId.current === song.videoId) return;
 
-    playerRepo.current.reset();
-    scrobbledRef.current = false;
-
-    const wasPaused = !usePlayerStore.getState().isPlaying;
-
-    pendingPlayId.current = song.id;
-    lastPlayedId.current = song.id;
-
-    if (song.videoId) {
-      streamingVideoId.current = song.videoId;
-    }
-
-    songEndHandled.current = false;
-
-    const { setDuration } = usePlayerStore.getState();
-
-    setProgress(0);
-    setDuration(0);
-    songEndHandled.current = false;
-    streamingVideoId.current = song.videoId ?? null;
+    playLockRef.current = true;
 
     try {
-      await playerRepo.current.stop();
-    } catch {}
+      playerRepo.current.reset();
+      scrobbledRef.current = false;
 
-    ignorePositionUntil.current = Date.now() + 500;
+      const wasPaused = !usePlayerStore.getState().isPlaying;
 
-    if (song.duration && song.duration > 0) {
-      setDuration(song.duration);
-    }
-    try {
-      isLoadingRef.current = true;
-      usePlayerStore.getState().setIsLoading(true);
+      pendingPlayId.current = song.id;
+      lastPlayedId.current = song.id;
+
+      if (song.videoId) {
+        streamingVideoId.current = song.videoId;
+      }
+
+      songEndHandled.current = false;
+
+      const { setDuration } = usePlayerStore.getState();
+
+      setProgress(0);
+      setDuration(0);
+      songEndHandled.current = false;
+      streamingVideoId.current = song.videoId ?? null;
+
+      try {
+        await playerRepo.current.stop();
+      } catch {}
+
+      ignorePositionUntil.current = Date.now() + 120;
+
+      const isStream =
+        song.source === "youtube" || song.source === "soundcloud";
+
+      if (isStream) {
+        isLoadingRef.current = true;
+        usePlayerStore.getState().setIsLoading(true);
+      }
 
       if (
         (song.source === "youtube" ||
           (song.source as string) === "soundcloud") &&
         song.videoId
       ) {
-        let directUrl: string;
-        const cached = urlCache.current.get(song.videoId);
-
-        if (cached && Date.now() < cached.expires) {
-          directUrl = cached.url;
-        } else {
-          if (song.source === "youtube") {
-            directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
-          } else if ((song.source as string) === "soundcloud") {
-            directUrl = await tauriCommands.resolveSoundcloudUrl(song.videoId);
-          } else {
-            directUrl = song.videoId; // fallback
-          }
-          urlCache.current.set(song.videoId, {
-            url: directUrl,
-            expires: Date.now() + 5 * 60 * 60 * 1000,
-          });
+        let resolvedUrl = urlCache.current.get(song.videoId);
+        if (!resolvedUrl) {
+          resolvedUrl =
+            song.source === "youtube"
+              ? await tauriCommands.resolveYoutubeUrl(song.videoId)
+              : await tauriCommands.resolveSoundcloudUrl(song.videoId);
+          urlCache.current.set(song.videoId, resolvedUrl);
         }
         await playerRepo.current.play({
           ...song,
-          path: directUrl,
+          path: resolvedUrl,
           source: "local",
         });
       } else {
@@ -139,8 +139,7 @@ export const usePlayer = () => {
       usePlayerStore.getState().setError(String(err));
     } finally {
       pendingPlayId.current = null;
-      isLoadingRef.current = false;
-      usePlayerStore.getState().setIsLoading(false);
+      playLockRef.current = false;
     }
   }, []);
 
@@ -159,7 +158,7 @@ export const usePlayer = () => {
       setCurrentSong(nextSong);
       setProgress(0);
       setDuration(0);
-      ignorePositionUntil.current = Date.now() + 500;
+      ignorePositionUntil.current = Date.now() + 120;
     }
   }, [getNextSong, setCurrentSong, setProgress]);
 
@@ -177,6 +176,15 @@ export const usePlayer = () => {
           store.setPlaying(backendIsPlaying);
         }
 
+        // HIDE SPINNER AFTER 4 SECONDS OF PLAYBACK
+        if (isLoadingRef.current && position >= 0.000001) {
+          isLoadingRef.current = false;
+          store.setIsLoading(false);
+        }
+
+        if (store.duration === 0 && duration > 0) {
+          store.setDuration(duration);
+        }
         if (Date.now() < ignorePositionUntil.current) {
           if (position > 0 || duration > 0) {
             ignorePositionUntil.current = 0;
@@ -196,7 +204,7 @@ export const usePlayer = () => {
           if (
             !scrobbledRef.current &&
             duration > 0 &&
-            position >= Math.min(duration / 2, 240)
+            position >= Math.min(store.duration / 2, 240)
           ) {
             scrobbledRef.current = true;
             const song = usePlayerStore.getState().currentSong;
@@ -230,8 +238,8 @@ export const usePlayer = () => {
         }
 
         if (
-          duration > 1 &&
-          position >= duration - 1 &&
+          duration > 2 &&
+          position >= duration - 2 &&
           !songEndHandled.current
         ) {
           songEndHandled.current = true;
@@ -255,6 +263,37 @@ export const usePlayer = () => {
     const effectiveVolume = isMuted ? 0 : volume;
     playerRepo.current.setVolume(effectiveVolume);
   }, [volume, isMuted]);
+
+  // Listen for tray events
+  useEffect(() => {
+    let unlisten1: (() => void) | null = null;
+    let unlisten2: (() => void) | null = null;
+
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen("tray-next", () => {
+        lastPlayedId.current = null;
+        handleNext();
+      }).then((fn) => (unlisten1 = fn));
+
+      listen("tray-prev", () => {
+        const prev = getPrevSong();
+        if (prev) {
+          lastPlayedId.current = null;
+          setCurrentSong(prev);
+          setProgress(0);
+          ignorePositionUntil.current = 120;
+          try {
+            playerRepo.current.stop();
+          } catch {}
+        }
+      }).then((fn) => (unlisten2 = fn));
+    });
+
+    return () => {
+      unlisten1?.();
+      unlisten2?.();
+    };
+  }, []);
 
   const togglePlay = async () => {
     const current = usePlayerStore.getState().isPlaying;
@@ -300,12 +339,13 @@ export const usePlayer = () => {
       lastPlayedId.current = null;
       setCurrentSong(prev);
       setProgress(0);
-      ignorePositionUntil.current = Number.MAX_SAFE_INTEGER;
+      ignorePositionUntil.current = 120;
       try {
         playerRepo.current.stop();
       } catch {}
     }
   };
+
   const setVolume = (v: number) => setVolumeStore(v);
   const toggleMute = () => toggleMuteStore();
 
@@ -316,7 +356,7 @@ export const usePlayer = () => {
     volume: isMuted ? 0 : volume,
     isShuffle,
     repeatMode,
-    isLoading: isLoadingRef.current,
+    isLoading,
     togglePlay,
     setProgress: seek,
     setVolume,
