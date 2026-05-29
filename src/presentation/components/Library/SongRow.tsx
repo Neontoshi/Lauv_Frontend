@@ -2,6 +2,13 @@ import React from "react";
 import { Song } from "../../../core/entities/Song";
 import { usePlayerStore } from "../../stores/playerStore";
 import { useLibraryStore } from "../../stores/libraryStore";
+import { tauriCommands } from "../../../services/tauriBridge";
+
+// FIX #9: Define a Playlist type instead of any[]
+interface Playlist {
+  id: string;
+  name: string;
+}
 
 const PlayingBars = () => (
   <div
@@ -12,36 +19,19 @@ const PlayingBars = () => (
       height: "14px",
     }}
   >
-    <div
-      style={{
-        width: "3px",
-        background: "var(--accent)",
-        borderRadius: "1px",
-        animation: "barBounce 0.8s ease-in-out infinite",
-        animationDelay: "0s",
-        height: "14px",
-      }}
-    />
-    <div
-      style={{
-        width: "3px",
-        background: "var(--accent)",
-        borderRadius: "1px",
-        animation: "barBounce 0.8s ease-in-out infinite",
-        animationDelay: "0.2s",
-        height: "14px",
-      }}
-    />
-    <div
-      style={{
-        width: "3px",
-        background: "var(--accent)",
-        borderRadius: "1px",
-        animation: "barBounce 0.8s ease-in-out infinite",
-        animationDelay: "0.4s",
-        height: "14px",
-      }}
-    />
+    {[0, 0.2, 0.4].map((delay, i) => (
+      <div
+        key={i}
+        style={{
+          width: "3px",
+          background: "var(--accent)",
+          borderRadius: "1px",
+          height: "14px",
+          animation: "barBounce 0.8s ease-in-out infinite",
+          animationDelay: `${delay}s`,
+        }}
+      />
+    ))}
   </div>
 );
 
@@ -58,36 +48,65 @@ const SongRow: React.FC<SongRowProps> = ({
   isCurrent,
   onPlay,
 }) => {
-  const { toggleLike } = useLibraryStore();
-  const { isPlaying } = usePlayerStore();
-  const isLoading = usePlayerStore((s) => s.isLoading);
-  const currentSongId = usePlayerStore((s) => s.currentSong?.id);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const setTriggerReload = useLibraryStore((s) => s.setTriggerReload);
+
+  // FIX #12: Consolidate all playerStore reads into one selector to reduce re-renders
+  const { isPlaying, isLoading, currentSongId, setMessage, setError } =
+    usePlayerStore((s) => ({
+      isPlaying: s.isPlaying,
+      isLoading: s.isLoading,
+      currentSongId: s.currentSong?.id,
+      setMessage: s.setMessage,
+      setError: s.setError,
+    }));
+
+  // FIX #7: Only show spinner if THIS song is loading
   const isThisSongLoading = isLoading && currentSongId === song.id;
+
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [isDownloaded, setIsDownloaded] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
   const [showPlaylistMenu, setShowPlaylistMenu] = React.useState(false);
-  const [playlists, setPlaylists] = React.useState<any[]>([]);
+  const [playlists, setPlaylists] = React.useState<Playlist[]>([]);
   const playlistMenuRef = React.useRef<HTMLDivElement>(null);
 
+  // FIX #10: Use typed comparison rather than casting
+  const isYouTube = song.source === "youtube";
+  const isSoundCloud = song.source === "soundcloud";
+  const isStreamable = isYouTube || isSoundCloud;
+
+  // FIX #8: Use an isMounted ref to avoid setState on unmounted component
   React.useEffect(() => {
-    if (song.videoId) {
-      import("@tauri-apps/api/core").then(({ invoke }) => {
-        invoke("check_download_exists", { videoId: song.videoId })
-          .then((exists) => setIsDownloaded(exists as boolean))
-          .catch(() => {});
-      });
-    }
-  }, [song.videoId]);
+    let cancelled = false;
+    if (!song.videoId) return;
+
+    const check = isYouTube
+      ? tauriCommands.checkDownloadExists(song.videoId)
+      : isSoundCloud
+        ? tauriCommands.checkSoundcloudDownloadExists(song.videoId)
+        : null;
+
+    check
+      ?.then((exists) => {
+        if (!cancelled) setIsDownloaded(exists);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [song.videoId, isYouTube, isSoundCloud]);
 
   React.useEffect(() => {
-    if (showPlaylistMenu) {
-      import("@tauri-apps/api/core").then(({ invoke }) => {
-        invoke("get_playlists").then((data: any) => setPlaylists(data || []));
-      });
-    }
+    if (!showPlaylistMenu) return;
+    tauriCommands
+      .getPlaylists()
+      .then((data: Playlist[]) => setPlaylists(data || []))
+      .catch(() => {});
   }, [showPlaylistMenu]);
 
+  // FIX #4: Use mousedown consistently for both open and close detection
   React.useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (
@@ -101,35 +120,64 @@ const SongRow: React.FC<SongRowProps> = ({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const handleLike = (e: React.MouseEvent) => {
+  const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    toggleLike(song.id);
-  };
 
+    if (isSoundCloud) {
+      try {
+        await tauriCommands.toggleLikeSoundcloud({
+          trackId: song.id,
+          title: song.title,
+          artist: song.artist,
+          album: song.album || "SoundCloud",
+          durationSecs: song.duration || 0,
+          thumbnail: song.artwork || "",
+          videoId: song.videoId,
+          path: song.path || "",
+        });
+        // Toggle UI only - don't call toggleLike which re-inserts into liked_tracks
+        toggleLike(song.id);
+      } catch (err) {
+        console.error("Failed to toggle like:", err);
+        setError("Failed to save like");
+      }
+    } else {
+      toggleLike(song.id, song.liked ? undefined : song);
+      try {
+        await tauriCommands.toggleLike(song.id);
+      } catch (err) {
+        console.error("Failed to toggle like:", err);
+        toggleLike(song.id);
+        setError("Failed to save like");
+      }
+    }
+  };
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!song.videoId || song.source !== "youtube" || isDownloading) return;
+    // FIX #3: Guard against non-streamable sources even if called directly
+    if (!song.videoId || isDownloading || isDownloaded || !isStreamable) return;
+
     setIsDownloading(true);
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("youtube_download", {
-        videoId: song.videoId,
-        title: song.title,
-      });
+      if (isYouTube) {
+        await tauriCommands.downloadYoutube(song.videoId, song.title);
+      } else if (isSoundCloud) {
+        await tauriCommands.downloadSoundcloud(song.videoId, song.title);
+      }
       setIsDownloaded(true);
-      usePlayerStore.getState().setMessage(`Downloaded "${song.title}"`);
-      useLibraryStore.getState().setTriggerReload();
+      // FIX #14: Use store actions from hook, not getState()
+      setMessage(`Downloaded "${song.title}"`);
+      setTriggerReload();
     } catch (err) {
       console.error("Download failed:", err);
-      usePlayerStore.getState().setError(String(err));
+      setError(String(err));
     } finally {
       setIsDownloading(false);
     }
   };
 
-  const isYouTube = song.source === "youtube";
-
-  const renderThumb = () => {
+  // FIX #11: Explicit return type; handle undefined emoji gracefully
+  const renderThumb = (): React.ReactNode => {
     if (song.artwork) {
       return (
         <img
@@ -161,7 +209,15 @@ const SongRow: React.FC<SongRowProps> = ({
         />
       );
     }
-    return song.emoji;
+    return song.emoji ?? null;
+  };
+
+  // FIX #5: Compute the correct thumbnail for playlist add, per source
+  const getPlaylistThumbnail = (): string => {
+    if (song.artwork) return song.artwork;
+    if (isYouTube && song.videoId)
+      return `https://i.ytimg.com/vi/${song.videoId}/default.jpg`;
+    return "";
   };
 
   return (
@@ -200,21 +256,31 @@ const SongRow: React.FC<SongRowProps> = ({
           index + 1
         )}
       </div>
+
       <div className="song-thumb">
         <div className="song-thumb-inner" style={{ background: song.grad }}>
           {renderThumb()}
         </div>
       </div>
+
       <div className="song-info">
         <div className="song-name">
           {song.title}
           {isYouTube && <span className="yt-badge">YT</span>}
+          {isSoundCloud && (
+            <span className="yt-badge" style={{ background: "#ff5500" }}>
+              SC
+            </span>
+          )}
         </div>
         <div className="song-artist">{song.artist}</div>
       </div>
+
       <div className="song-album">{song.album}</div>
       <div className="song-dur">{song.dur}</div>
+
       <div className="song-actions">
+        {/* Like button - now works instantly for both YouTube and SoundCloud */}
         <div
           className={`sm-btn ${song.liked ? "liked" : ""}`}
           onClick={handleLike}
@@ -229,7 +295,9 @@ const SongRow: React.FC<SongRowProps> = ({
             <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
           </svg>
         </div>
-        {isYouTube && (
+
+        {/* Download button — YouTube and SoundCloud only */}
+        {isStreamable && (
           <div
             className="sm-btn"
             title={isDownloaded ? "Downloaded" : "Download"}
@@ -276,12 +344,13 @@ const SongRow: React.FC<SongRowProps> = ({
           </div>
         )}
 
+        {/* Add to playlist */}
         <div
           className="sm-btn"
           title="Add to playlist"
-          onClick={(e) => {
+          onMouseDown={(e) => {
             e.stopPropagation();
-            setShowPlaylistMenu(!showPlaylistMenu);
+            setShowPlaylistMenu((prev) => !prev);
           }}
           style={{ position: "relative" }}
         >
@@ -294,6 +363,7 @@ const SongRow: React.FC<SongRowProps> = ({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
+
           {showPlaylistMenu && (
             <div
               ref={playlistMenuRef}
@@ -321,33 +391,26 @@ const SongRow: React.FC<SongRowProps> = ({
                   No playlists
                 </div>
               ) : (
-                playlists.map((pl: any) => (
+                playlists.map((pl) => (
                   <div
                     key={pl.id}
-                    onClick={async (e) => {
+                    onMouseDown={async (e) => {
                       e.stopPropagation();
                       try {
-                        const { invoke } = await import("@tauri-apps/api/core");
-                        await invoke("add_to_playlist", {
-                          playlistId: pl.id,
-                          songId: song.id,
-                          title: song.title,
-                          artist: song.artist,
-                          album: song.album || "",
-                          durationSecs: song.duration || 0,
-                          thumbnail:
-                            song.artwork ||
-                            (song.videoId
-                              ? `https://i.ytimg.com/vi/${song.videoId}/default.jpg`
-                              : ""),
-                          videoId: song.videoId || undefined,
-                          source: song.source || "local",
-                          path: song.path || "",
-                        });
+                        await tauriCommands.addToPlaylist(
+                          pl.id,
+                          song.id,
+                          song.title,
+                          song.artist,
+                          song.album || "",
+                          song.duration || 0,
+                          getPlaylistThumbnail(),
+                          song.source || "local",
+                          song.path || "",
+                          song.videoId || undefined,
+                        );
                         setShowPlaylistMenu(false);
-                        usePlayerStore
-                          .getState()
-                          .setMessage(`Added to ${pl.name}`);
+                        setMessage(`Added to ${pl.name}`);
                       } catch (err) {
                         console.error("Failed to add to playlist:", err);
                       }

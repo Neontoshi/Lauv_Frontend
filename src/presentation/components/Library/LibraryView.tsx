@@ -7,8 +7,9 @@ import { useYouTubeStore } from "../../stores/youtubeStore";
 import { Song } from "../../../core/entities/Song";
 import { useQueueStore } from "../../stores/queueStore";
 import { useLibraryStore } from "../../stores/libraryStore";
+import { tauriCommands } from "../../../services/tauriBridge";
 
-type SearchTab = "library" | "youtube";
+type SearchTab = "library" | "youtube" | "soundcloud";
 
 const LibraryView: React.FC = () => {
   const { songs: localSongs, setActiveSort, loading } = useLibrary();
@@ -25,48 +26,106 @@ const LibraryView: React.FC = () => {
 
   const [sortChip, setSortChip] = useState("#");
   const [activeTab, setActiveTab] = useState<SearchTab>("library");
+  const [scSongs, setScSongs] = useState<Song[]>([]);
+  const [isScSearching, setIsScSearching] = useState(false);
 
   const isSearching_ = searchQuery.trim().length > 0;
 
-  // Sync searchQuery to library store for local filtering
   useEffect(() => {
     setLibSearchQuery(searchQuery);
   }, [searchQuery]);
-  // Reset tab when search clears
+
   useEffect(() => {
     if (!searchQuery.trim()) {
       setActiveTab("library");
     }
   }, [searchQuery]);
 
-  // Trigger YouTube search when query changes
   useEffect(() => {
     if (searchQuery.trim()) {
       searchYouTube(searchQuery);
     }
   }, [searchQuery]);
 
-  // Show songs based on active tab
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      setIsScSearching(true);
+      tauriCommands
+        .searchSoundcloud(searchQuery)
+        .then((results: any[]) => {
+          setScSongs(
+            results.map((r: any) => ({
+              id: `sc-${r.id}`,
+              path: "",
+              title: r.title,
+              artist: r.artist,
+              album: "SoundCloud",
+              duration: r.duration_secs,
+              genre: null,
+              year: null,
+              track_number: null,
+              artwork: r.thumbnail,
+              source: "soundcloud" as any,
+              videoId: r.id,
+              dur: r.duration_str,
+              emoji: "☁️",
+              grad: "linear-gradient(135deg, #ff8800, #ff5500)",
+              bpm: 0,
+              key: "—",
+              plays: 0,
+              liked: false,
+            })) || [],
+          );
+          setIsScSearching(false);
+        })
+        .catch(() => setIsScSearching(false));
+    }
+  }, [searchQuery]);
+
   const displaySongs: Song[] = useMemo(() => {
     if (!isSearching_) return localSongs;
     if (activeTab === "library") return localSongs;
-    // For YouTube tab, merge liked status from library store
-    const librarySongs = useLibraryStore.getState().songs;
-    const likedIds = new Set(
-      librarySongs.filter((s) => s.liked).map((s) => s.id),
-    );
-    return ytSongs.map((s) => ({
-      ...s,
-      liked: likedIds.has(s.id),
-    }));
-  }, [localSongs, ytSongs, activeTab, isSearching_]);
+    if (activeTab === "youtube") {
+      const librarySongs = useLibraryStore.getState().songs;
+      const likedIds = new Set(
+        librarySongs.filter((s) => s.liked).map((s) => s.id),
+      );
+      return ytSongs.map((s) => ({ ...s, liked: likedIds.has(s.id) }));
+    }
+    if (activeTab === "soundcloud") {
+      const librarySongs = useLibraryStore.getState().songs;
+      const likedIds = new Set(
+        librarySongs.filter((s) => s.liked).map((s) => s.id),
+      );
+      return scSongs.map((s) => ({ ...s, liked: likedIds.has(s.id) }));
+    }
+    return [];
+  }, [localSongs, ytSongs, scSongs, activeTab, isSearching_]);
+
+  const totalDuration = localSongs.reduce((acc, song) => {
+    const parts = song.dur.split(":");
+    return acc + parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  }, 0);
+  //@ts-ignore
+  const _totalHours = Math.floor(totalDuration / 3600);
+  //@ts-ignore
+  const _totalMinutes = Math.floor((totalDuration % 3600) / 60);
 
   const handlePlaySong = (song: Song) => {
-    const combined = [...localSongs, ...ytSongs];
-    setQueue(combined, song, activeTab === "youtube" ? "search" : "library");
+    const combined = [...localSongs, ...ytSongs, ...scSongs];
+    setQueue(
+      combined,
+      song,
+      activeTab === "youtube"
+        ? "search"
+        : activeTab === "soundcloud"
+          ? "search"
+          : "library",
+    );
     setCurrentSong(song);
     setProgress(0);
   };
+
   const handleSortChip = (chip: string) => {
     setSortChip(chip);
     if (chip === "#") setActiveSort("default");
@@ -103,7 +162,6 @@ const LibraryView: React.FC = () => {
         height: "100%",
       }}
     >
-      {/* Search bar */}
       <div
         style={{
           position: "sticky",
@@ -135,19 +193,17 @@ const LibraryView: React.FC = () => {
         </div>
       </div>
 
-      {/* Scrollable content */}
       <div style={{ overflowY: "auto", flex: 1, paddingTop: "16px" }}>
-        {/* Header */}
         <div className="section-header">
           <div>
             <div className="section-title">Your Library</div>
             <div className="section-sub">
               {isSearching_
-                ? `${localSongs.length + ytSongs.length} results`
+                ? `${localSongs.length + ytSongs.length + scSongs.length} results`
                 : `${localSongs.length} songs`}
               {isSearching && (
                 <span style={{ marginLeft: 8, color: "var(--accent)" }}>
-                  · Searching YouTube...
+                  · Searching...
                 </span>
               )}
             </div>
@@ -230,7 +286,6 @@ const LibraryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Sort Row */}
         <div className="sort-row">
           {["#", "Title", "Artist", "Album", "Duration", "Plays"].map(
             (chip) => (
@@ -245,7 +300,6 @@ const LibraryView: React.FC = () => {
           )}
         </div>
 
-        {/* Search Tabs */}
         {isSearching_ && (
           <div
             style={{
@@ -294,10 +348,30 @@ const LibraryView: React.FC = () => {
               YouTube{ytSongs.length > 0 ? ` (${ytSongs.length})` : ""}
               {isSearching && !ytSongs.length && " ···"}
             </button>
+            <button
+              onClick={() => setActiveTab("soundcloud")}
+              style={{
+                padding: "8px 24px",
+                background: "transparent",
+                border: "none",
+                borderBottom:
+                  activeTab === "soundcloud"
+                    ? "2px solid var(--accent)"
+                    : "2px solid transparent",
+                color:
+                  activeTab === "soundcloud" ? "var(--text)" : "var(--text3)",
+                cursor: "pointer",
+                fontFamily: "'Syne', sans-serif",
+                fontSize: "13px",
+                fontWeight: activeTab === "soundcloud" ? 600 : 400,
+              }}
+            >
+              SoundCloud{scSongs.length > 0 ? ` (${scSongs.length})` : ""}
+              {isScSearching && !scSongs.length && " ···"}
+            </button>
           </div>
         )}
 
-        {/* Song List */}
         {displaySongs.length === 0 ? (
           <div
             style={{
@@ -312,7 +386,11 @@ const LibraryView: React.FC = () => {
                 ? isSearching
                   ? "Searching YouTube..."
                   : "No YouTube results"
-                : "No library matches"
+                : activeTab === "soundcloud"
+                  ? isScSearching
+                    ? "Searching SoundCloud..."
+                    : "No SoundCloud results"
+                  : "No library matches"
               : "No songs found"}
           </div>
         ) : (

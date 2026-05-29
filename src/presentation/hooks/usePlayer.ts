@@ -80,20 +80,29 @@ export const usePlayer = () => {
       isLoadingRef.current = true;
       usePlayerStore.getState().setIsLoading(true);
 
-      if (song.source === "youtube" && song.videoId) {
+      if (
+        (song.source === "youtube" ||
+          (song.source as string) === "soundcloud") &&
+        song.videoId
+      ) {
         let directUrl: string;
         const cached = urlCache.current.get(song.videoId);
 
         if (cached && Date.now() < cached.expires) {
           directUrl = cached.url;
         } else {
-          directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
+          if (song.source === "youtube") {
+            directUrl = await tauriCommands.resolveYoutubeUrl(song.videoId);
+          } else if ((song.source as string) === "soundcloud") {
+            directUrl = await tauriCommands.resolveSoundcloudUrl(song.videoId);
+          } else {
+            directUrl = song.videoId; // fallback
+          }
           urlCache.current.set(song.videoId, {
             url: directUrl,
             expires: Date.now() + 5 * 60 * 60 * 1000,
           });
         }
-
         await playerRepo.current.play({
           ...song,
           path: directUrl,

@@ -9,11 +9,9 @@ export interface Song {
   year: number | null;
   track_number: number | null;
   artwork: string | null;
-
   // Source tracking
-  source?: "local" | "youtube";
+  source?: "local" | "youtube" | "soundcloud";
   videoId?: string;
-
   // UI-only fields
   dur: string;
   emoji: string;

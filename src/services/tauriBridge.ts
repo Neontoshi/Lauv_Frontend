@@ -33,7 +33,7 @@ export interface YtSong {
   duration_secs: number;
   duration_str: string;
   thumbnail: string;
-  source: "youtube";
+  source: "youtube" | "soundcloud";
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────
@@ -51,9 +51,6 @@ export const tauriCommands = {
   getMetadata: (path: string): Promise<Partial<Song>> =>
     handleInvoke("get_metadata", { path }),
 
-  checkDownloadExists: (videoId: string): Promise<boolean> =>
-    handleInvoke("check_download_exists", { videoId }),
-
   // Player
   playTrack: (song: Song): Promise<void> => {
     const {
@@ -69,7 +66,6 @@ export const tauriCommands = {
       source,
       ...rest
     } = song as any;
-    // Ensure source field is included for YouTube detection
     const payload = source ? { ...rest, source } : rest;
     return handleInvoke("play_track", { song: payload });
   },
@@ -98,9 +94,7 @@ export const tauriCommands = {
 
   previousTrack: (): Promise<void> => handleInvoke("prev_track"),
 
-  resetVisualizer: (): Promise<void> => handleInvoke("reset_visualizer"),
-
-  // YouTube — FIXED command names
+  // YouTube
   searchYoutube: (query: string): Promise<YtSong[]> =>
     handleInvoke("youtube_search", { query }),
 
@@ -113,14 +107,36 @@ export const tauriCommands = {
   resolveYoutubeUrl: (videoId: string): Promise<string> =>
     handleInvoke("resolve_youtube_url", { videoId }),
 
+  checkDownloadExists: (videoId: string): Promise<boolean> =>
+    handleInvoke("check_download_exists", { videoId }),
+
+  // SoundCloud
+  searchSoundcloud: (query: string): Promise<YtSong[]> =>
+    handleInvoke("soundcloud_search", { query }),
+
+  resolveSoundcloudUrl: (videoId: string): Promise<string> =>
+    handleInvoke("resolve_soundcloud_url", { videoId }),
+
+  streamSoundcloud: (videoId: string): Promise<string> =>
+    handleInvoke("stream_soundcloud", { videoId }),
+
+  downloadSoundcloud: (videoId: string, title: string): Promise<string> =>
+    handleInvoke("soundcloud_download", { videoId, title }),
+
+  checkSoundcloudDownloadExists: (videoId: string): Promise<boolean> =>
+    handleInvoke("check_soundcloud_download_exists", { videoId }),
+
+  // Settings
   getSetting: (key: string): Promise<string | null> =>
     handleInvoke("get_setting", { key }),
+
   setSetting: (key: string, value: string): Promise<void> =>
     handleInvoke("set_setting", { key, value }),
 
   fetchListenbrainzStats: (user: string): Promise<string> =>
     handleInvoke("fetch_listenbrainz_stats", { user }),
 
+  // Play history
   savePlayHistory: (params: {
     songId: string;
     title: string;
@@ -136,7 +152,9 @@ export const tauriCommands = {
   getRecentlyPlayed: (limit?: number) =>
     handleInvoke("get_recently_played", { limit }),
 
+  // Liked songs
   getLikedSongs: (): Promise<string[]> => handleInvoke("get_liked_songs"),
+
   toggleLike: (trackId: string): Promise<boolean> =>
     handleInvoke("toggle_like", { trackId }),
 
@@ -151,6 +169,18 @@ export const tauriCommands = {
     source: string;
     path: string;
   }) => handleInvoke("save_liked_song", params),
+
+  toggleLikeSoundcloud: (params: {
+    trackId: string;
+    title: string;
+    artist: string;
+    album: string;
+    durationSecs: number;
+    thumbnail: string;
+    videoId?: string;
+    path: string;
+  }): Promise<boolean> => handleInvoke("toggle_like_soundcloud", params),
+
   getLikedSongsFull: (): Promise<any[]> => handleInvoke("get_liked_songs_full"),
 
   // Playlists
@@ -168,7 +198,9 @@ export const tauriCommands = {
       mood,
       privacy,
     }),
+
   getPlaylists: (): Promise<any[]> => handleInvoke("get_playlists"),
+
   addToPlaylist: (
     playlistId: string,
     songId: string,
@@ -193,11 +225,14 @@ export const tauriCommands = {
       path,
       videoId,
     }),
+
   getPlaylistSongs: (playlistId: string): Promise<any[]> =>
     handleInvoke("get_playlist_songs", { playlistId }),
+
   removeFromPlaylist: (playlistId: string, songId: string): Promise<void> =>
     handleInvoke("remove_from_playlist", { playlistId, songId }),
 
+  // Utilities
   checkYtdlp: (): Promise<string> => handleInvoke("check_ytdlp"),
 };
 
@@ -218,42 +253,23 @@ export const tauriEvents = {
       track_id: number;
       is_playing: boolean;
     }>("playback-update", (event) => callback(event.payload));
-    // Return cleanup function
     let done = false;
-    const cleanup = () => {
+    return () => {
       if (!done) {
         done = true;
         unlisten.then((fn) => fn());
       }
     };
-    return cleanup;
   },
 
   onTrackEnded: (callback: () => void): (() => void) => {
     const unlisten = listen<boolean>("track-ended", () => callback());
     let done = false;
-    const cleanup = () => {
+    return () => {
       if (!done) {
         done = true;
         unlisten.then((fn) => fn());
       }
     };
-    return cleanup;
-  },
-
-  onAudioFrequencies: (
-    callback: (frequencies: number[]) => void,
-  ): (() => void) => {
-    const unlisten = listen<number[]>("audio-frequencies", (event) =>
-      callback(event.payload),
-    );
-    let done = false;
-    const cleanup = () => {
-      if (!done) {
-        done = true;
-        unlisten.then((fn) => fn());
-      }
-    };
-    return cleanup;
   },
 };

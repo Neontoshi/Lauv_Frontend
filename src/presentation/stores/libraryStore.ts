@@ -18,7 +18,7 @@ interface LibraryStore {
   setSearchQuery: (query: string) => void;
   setActiveGenre: (genre: string) => void;
   setActiveSort: (sort: string) => void;
-  toggleLike: (songId: string) => void;
+  toggleLike: (songId: string, songData?: Song) => void;
   setTriggerReload: () => void;
   filterAndSort: () => void;
 }
@@ -41,40 +41,21 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   setActiveSort: (activeSort) => set({ activeSort }),
   setTriggerReload: () => set((s) => ({ triggerReload: s.triggerReload + 1 })),
 
-  toggleLike: (songId) => {
+  toggleLike: (songId, songData) => {
     console.log("[LIKE] toggling:", songId);
 
     set((state) => {
       const exists = state.songs.find((s) => s.id === songId);
-      // In toggleLike, after the state update:
-      const song =
-        useLibraryStore.getState().songs.find((s) => s.id === songId) ||
-        useYouTubeStore.getState().results.find((s) => s.id === songId);
 
-      if (song) {
-        tauriCommands
-          .saveLikedSong({
-            id: song.id,
-            title: song.title,
-            artist: song.artist,
-            album: song.album || "",
-            durationSecs: song.duration || 0,
-            thumbnail:
-              song.artwork ||
-              (song.videoId
-                ? `https://i.ytimg.com/vi/${song.videoId}/default.jpg`
-                : ""),
-            videoId: song.videoId || undefined,
-            source: song.source || "local",
-            path: song.path || "",
-          })
-          .catch(() => {});
+      if (!exists && songData) {
+        return {
+          songs: [...state.songs, { ...songData, liked: true }],
+        };
       }
 
       if (!exists) {
         const ytStore = useYouTubeStore.getState();
         const ytSong = ytStore.results.find((s: Song) => s.id === songId);
-
         if (ytSong) {
           return {
             songs: [...state.songs, { ...ytSong, liked: true }],
