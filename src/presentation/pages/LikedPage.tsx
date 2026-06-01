@@ -20,47 +20,39 @@ const formatTotalDuration = (songs: Song[]) => {
   const total = songs.reduce((acc, s) => acc + (s.duration || 0), 0);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
-  if (h > 0) return `${h} hr ${m} min`;
+  if (h > 0) return `${h}h ${m}m`;
   return `${m} min`;
 };
 
 const PlayingBars = () => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "flex-end",
-      gap: "2px",
-      height: "14px",
-    }}
-  >
+  <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 14 }}>
     <div
       style={{
-        width: "3px",
+        width: 3,
         background: "var(--accent2)",
-        borderRadius: "1px",
+        borderRadius: 1,
         animation: "barBounce 0.8s ease-in-out infinite",
-        animationDelay: "0s",
-        height: "14px",
+        height: 14,
       }}
     />
     <div
       style={{
-        width: "3px",
+        width: 3,
         background: "var(--accent2)",
-        borderRadius: "1px",
+        borderRadius: 1,
         animation: "barBounce 0.8s ease-in-out infinite",
         animationDelay: "0.15s",
-        height: "14px",
+        height: 14,
       }}
     />
     <div
       style={{
-        width: "3px",
+        width: 3,
         background: "var(--accent2)",
-        borderRadius: "1px",
+        borderRadius: 1,
         animation: "barBounce 0.8s ease-in-out infinite",
         animationDelay: "0.3s",
-        height: "14px",
+        height: 14,
       }}
     />
   </div>
@@ -87,7 +79,7 @@ const LikedPage: React.FC = () => {
     return list;
   };
 
-  const getFiltered = () => {
+  const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return getSorted().filter(
       (s) =>
@@ -96,14 +88,11 @@ const LikedPage: React.FC = () => {
         s.artist.toLowerCase().includes(q) ||
         (s.album || "").toLowerCase().includes(q),
     );
-  };
-
-  const filtered = getFiltered();
+  }, [likedSongs, query, sortMode]);
 
   const handlePlay = (_song: Song, index: number) => {
-    const list = filtered;
-    setQueue(list, list[index], "library");
-    setCurrentSong(list[index]);
+    setQueue(filtered, filtered[index], "library");
+    setCurrentSong(filtered[index]);
     setProgress(0);
   };
 
@@ -117,278 +106,208 @@ const LikedPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="song-list-pane"
-      style={{ padding: "0", overflowY: "auto", height: "100%" }}
-    >
-      <style>{`
-        @keyframes barBounce {
-          0%, 100% { transform: scaleY(0.15); }
-          50% { transform: scaleY(1); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(14px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes heartPop {
-          0% { transform: scale(1); }
-          40% { transform: scale(1.4); }
-          70% { transform: scale(0.85); }
-          100% { transform: scale(1); }
-        }
-      `}</style>
-
-      {/* Hero */}
-      <div
-        style={{
-          padding: "4rem 2rem 3rem",
-          borderBottom: "1px solid var(--border)",
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          alignItems: "end",
-          gap: "2rem",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: "11px",
-              letterSpacing: "0.2em",
-              color: "var(--accent2)",
-              textTransform: "uppercase",
-              marginBottom: "1rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
+    <div className="ap-page">
+      <div className="ap-container" style={{ paddingBottom: "6rem" }}>
+        {/* Header — tight */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 16,
+            paddingTop: "1.5rem",
+            marginBottom: "1.25rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
             <div
+              className="ap-page-eyebrow"
+              style={{ color: "var(--accent2)" }}
+            >
+              Your Collection
+            </div>
+            <h1
               style={{
-                width: "24px",
-                height: "1px",
-                background: "var(--accent2)",
+                fontSize: "2rem",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                lineHeight: 1,
+                margin: 0,
               }}
-            />
-            Your collection
+            >
+              Liked{" "}
+              <span style={{ color: "var(--accent2)", fontStyle: "italic" }}>
+                Songs
+              </span>
+            </h1>
           </div>
-          <h1
-            style={{
-              fontFamily: "'Syne', sans-serif",
-              fontSize: "clamp(3rem, 8vw, 7rem)",
-              fontWeight: 800,
-              lineHeight: "0.9",
-              letterSpacing: "-0.03em",
-              color: "var(--text)",
-            }}
-          >
-            Liked
-            <br />
-            <span style={{ color: "var(--accent2)", fontStyle: "italic" }}>
-              Songs
-            </span>
-          </h1>
-        </div>
-        <div
-          style={{
-            textAlign: "right",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.5rem",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "4rem",
-              fontWeight: 800,
-              color: "var(--accent2)",
-              lineHeight: 1,
-            }}
-          >
-            {filtered.length}
-          </div>
-          <div
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: "10px",
-              letterSpacing: "0.15em",
-              color: "var(--text3)",
-              textTransform: "uppercase",
-            }}
-          >
-            tracks
-          </div>
-          <div
-            style={{
-              fontFamily: "'DM Mono', monospace",
-              fontSize: "11px",
-              color: "var(--text3)",
-            }}
-          >
-            {formatTotalDuration(filtered)}
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ textAlign: "right" }}>
+              <div
+                style={{
+                  fontSize: "1.5rem",
+                  fontWeight: 800,
+                  color: "var(--accent2)",
+                  lineHeight: 1,
+                }}
+              >
+                {filtered.length}
+              </div>
+              <div
+                style={{
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 9,
+                  color: "var(--text3)",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}
+              >
+                tracks
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "var(--text2)",
+                  lineHeight: 1,
+                }}
+              >
+                {formatTotalDuration(filtered)}
+              </div>
+              <div
+                style={{
+                  fontFamily: "'DM Mono',monospace",
+                  fontSize: 9,
+                  color: "var(--text3)",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}
+              >
+                duration
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Controls */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          padding: "1.5rem 2rem",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <button
-          onClick={handlePlayAll}
-          style={{
-            width: "52px",
-            height: "52px",
-            borderRadius: "50%",
-            background:
-              "linear-gradient(135deg, var(--accent), var(--accent2))",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-            transition: "transform 0.15s, box-shadow 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "scale(1.08)";
-            e.currentTarget.style.boxShadow = "0 0 30px rgba(192,132,252,0.3)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "scale(1)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="#fff"
-            width="20"
-            height="20"
-            style={{ marginLeft: "3px" }}
-          >
-            <polygon points="5,3 19,12 5,21" />
-          </svg>
-        </button>
-
-        <button
-          onClick={handleShuffle}
-          style={{
-            height: "38px",
-            padding: "0 18px",
-            borderRadius: "20px",
-            background: "transparent",
-            border: "1px solid var(--border2)",
-            color: "var(--text2)",
-            fontFamily: "'Syne', sans-serif",
-            fontSize: "12px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface2)";
-            e.currentTarget.style.color = "var(--text)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--text2)";
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <polyline points="16 3 21 3 21 8" />
-            <line x1="4" y1="20" x2="21" y2="3" />
-            <polyline points="21 16 21 21 16 21" />
-            <line x1="15" y1="15" x2="21" y2="21" />
-          </svg>
-          Shuffle
-        </button>
-
-        <button
-          onClick={() => setSortMode((sortMode + 1) % sortModes.length)}
-          style={{
-            height: "38px",
-            padding: "0 18px",
-            borderRadius: "20px",
-            background: "transparent",
-            border: "1px solid var(--border2)",
-            color: "var(--text2)",
-            fontFamily: "'Syne', sans-serif",
-            fontSize: "12px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface2)";
-            e.currentTarget.style.color = "var(--text)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "var(--text2)";
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="14"
-            height="14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          >
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
-          {sortModes[sortMode]}
-        </button>
-
+        {/* Controls bar */}
         <div
           style={{
-            marginLeft: "auto",
             display: "flex",
             alignItems: "center",
-            gap: "8px",
+            gap: 10,
+            marginBottom: "1.25rem",
+            flexWrap: "wrap",
           }}
         >
-          <div
+          <button
+            onClick={handlePlayAll}
             style={{
-              height: "36px",
-              background: "var(--surface2)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
               display: "flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "0 12px",
-              transition: "border-color 0.2s",
+              gap: 8,
+              padding: "10px 22px",
+              background:
+                "linear-gradient(135deg, var(--accent), var(--accent2))",
+              border: "none",
+              borderRadius: 99,
+              color: "#fff",
+              fontFamily: "'Syne',sans-serif",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+            Play All
+          </button>
+          <button
+            onClick={handleShuffle}
+            style={{
+              padding: "9px 18px",
+              borderRadius: 99,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              color: "var(--text2)",
+              fontFamily: "'Syne',sans-serif",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
             <svg
               viewBox="0 0 24 24"
-              width="14"
-              height="14"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <polyline points="16 3 21 3 21 8" />
+              <line x1="4" y1="20" x2="21" y2="3" />
+              <polyline points="21 16 21 21 16 21" />
+              <line x1="15" y1="15" x2="21" y2="21" />
+            </svg>
+            Shuffle
+          </button>
+          <button
+            onClick={() => setSortMode((sortMode + 1) % sortModes.length)}
+            style={{
+              padding: "9px 18px",
+              borderRadius: 99,
+              background: "transparent",
+              border: "1px solid var(--border)",
+              color: "var(--text2)",
+              fontFamily: "'Syne',sans-serif",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            {sortModes[sortMode]}
+          </button>
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "var(--surface2)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "0 12px",
+              height: 36,
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
               fill="none"
               stroke="var(--text3)"
               strokeWidth="2"
@@ -398,416 +317,277 @@ const LikedPage: React.FC = () => {
             </svg>
             <input
               type="text"
-              placeholder="Filter songs..."
+              placeholder="Filter..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{
                 background: "none",
                 border: "none",
                 color: "var(--text)",
-                fontFamily: "'DM Mono', monospace",
-                fontSize: "12px",
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 11,
                 outline: "none",
-                width: "160px",
+                width: 140,
               }}
             />
           </div>
         </div>
-      </div>
 
-      {/* Table header */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "48px 1fr 200px 80px 80px 48px",
-          padding: "0 2rem 0.6rem",
-          marginTop: "0.5rem",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-            textAlign: "center",
-          }}
-        >
-          #
-        </div>
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-          }}
-        >
-          Title
-        </div>
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-          }}
-        >
-          Album
-        </div>
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-            textAlign: "right",
-          }}
-        >
-          Source
-        </div>
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-            textAlign: "right",
-          }}
-        >
-          Time
-        </div>
-        <div
-          style={{
-            fontFamily: "'DM Mono', monospace",
-            fontSize: "10px",
-            letterSpacing: "0.15em",
-            color: "var(--text3)",
-            textTransform: "uppercase",
-            textAlign: "center",
-          }}
-        >
-          ♡
-        </div>
-      </div>
-
-      {/* Song list */}
-      <div
-        style={{ display: "flex", flexDirection: "column", padding: "0 1rem" }}
-      >
+        {/* Track list */}
         {filtered.length === 0 ? (
           <div
             style={{
+              textAlign: "center",
+              padding: "4rem 0",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
-              padding: "6rem 2rem",
-              gap: "1rem",
-              textAlign: "center",
+              gap: 12,
             }}
           >
             <div
               style={{
-                width: "80px",
-                height: "80px",
+                width: 64,
+                height: 64,
                 borderRadius: "50%",
                 background: "rgba(192,132,252,0.08)",
                 border: "1px solid rgba(192,132,252,0.15)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "32px",
+                fontSize: 28,
               }}
             >
               ♡
             </div>
-            <div
-              style={{
-                fontSize: "1.5rem",
-                fontWeight: 800,
-                color: "var(--text)",
-              }}
-            >
-              {query ? "Nothing here" : "No liked songs yet"}
+            <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>
+              {query ? "Nothing found" : "No liked songs yet"}
             </div>
             <div
               style={{
-                fontFamily: "'DM Mono', monospace",
-                fontSize: "12px",
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 11,
                 color: "var(--text3)",
-                letterSpacing: "0.05em",
               }}
             >
               {query
                 ? "No songs match your search"
-                : "Click the heart on any song to add it here"}
+                : "Click the heart on any song"}
             </div>
           </div>
         ) : (
-          filtered.map((song, idx) => {
-            const isActive = currentSong?.id === song.id;
-            return (
-              <div
-                key={song.id}
-                onClick={() => handlePlay(song, idx)}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "48px 1fr 200px 80px 80px 48px",
-                  alignItems: "center",
-                  padding: "0.55rem 1rem",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  transition: "background 0.12s, border-color 0.12s",
-                  position: "relative",
-                  border: "1px solid transparent",
-                  background: isActive
-                    ? "rgba(192,132,252,0.06)"
-                    : "transparent",
-                  borderColor: isActive
-                    ? "rgba(192,132,252,0.15)"
-                    : "transparent",
-                  animation: `fadeUp 0.4s both`,
-                  animationDelay: `${0.18 + idx * 0.03}s`,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = "var(--surface2)";
-                    e.currentTarget.style.borderColor = "var(--border)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.borderColor = "transparent";
-                  }
-                }}
-              >
-                {isActive && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      width: "2px",
-                      height: "55%",
-                      background: "var(--accent2)",
-                      borderRadius: "0 2px 2px 0",
-                    }}
-                  />
-                )}
+          <div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "32px 1fr 140px 60px 70px 48px",
+                gap: 12,
+                padding: "0 12px 8px",
+                borderBottom: "1px solid var(--border)",
+                marginBottom: 4,
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 10,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--text3)",
+              }}
+            >
+              <span style={{ textAlign: "center" }}>#</span>
+              <span>Title</span>
+              <span>Album</span>
+              <span>Source</span>
+              <span style={{ textAlign: "right" }}>Time</span>
+              <span style={{ textAlign: "center" }}>♡</span>
+            </div>
+            {filtered.map((song, idx) => {
+              const isActive = currentSong?.id === song.id;
+              return (
                 <div
+                  key={song.id}
+                  onClick={() => handlePlay(song, idx)}
                   style={{
-                    display: "flex",
+                    display: "grid",
+                    gridTemplateColumns: "32px 1fr 140px 60px 70px 48px",
                     alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
+                    gap: 12,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    border: "1px solid transparent",
+                    background: isActive
+                      ? "rgba(192,132,252,0.06)"
+                      : "transparent",
+                    borderColor: isActive
+                      ? "rgba(192,132,252,0.15)"
+                      : "transparent",
+                    transition: "background 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive)
+                      e.currentTarget.style.background = "var(--surface2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive)
+                      e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  <span
+                  <div
                     style={{
-                      fontFamily: "'DM Mono', monospace",
-                      fontSize: "12px",
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 12,
                       color: "var(--text3)",
-                      opacity: isActive ? 0 : 1,
-                      transition: "opacity 0.15s",
+                      textAlign: "center",
                     }}
                   >
-                    {idx + 1}
-                  </span>
-                  <span
+                    {isActive && isPlaying ? <PlayingBars /> : idx + 1}
+                  </div>
+                  <div
                     style={{
-                      position: "absolute",
-                      opacity: isActive ? 1 : 0,
-                      transition: "opacity 0.15s",
-                      color: isActive ? "var(--accent2)" : "var(--text2)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      minWidth: 0,
                     }}
                   >
-                    {isActive && isPlaying ? (
-                      <PlayingBars />
-                    ) : (
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 6,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 16,
+                        background: song.grad || randomGradient(),
+                        overflow: "hidden",
+                      }}
+                    >
+                      {song.artwork ? (
+                        <img
+                          src={song.artwork}
+                          alt=""
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : song.videoId ? (
+                        <img
+                          src={`https://i.ytimg.com/vi/${song.videoId}/default.jpg`}
+                          alt=""
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        song.emoji || "🎵"
+                      )}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          color: isActive ? "var(--accent2)" : "var(--text)",
+                        }}
+                      >
+                        {song.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--text2)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          marginTop: 1,
+                        }}
+                      >
+                        {song.artist}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text3)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {song.album || "—"}
+                  </div>
+                  <div>
+                    <span
+                      style={{
+                        fontFamily: "'DM Mono',monospace",
+                        fontSize: 8,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        padding: "2px 7px",
+                        borderRadius: 99,
+                        border: "1px solid var(--border)",
+                        color: "var(--text2)",
+                      }}
+                    >
+                      {song.source === "youtube" ? "YT" : "Local"}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'DM Mono',monospace",
+                      fontSize: 11,
+                      color: "var(--text3)",
+                      textAlign: "right",
+                    }}
+                  >
+                    {song.dur || formatDuration(song.duration || 0)}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(song.id);
+                      }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        border: "none",
+                        background: "none",
+                        color: song.liked ? "var(--accent2)" : "var(--text3)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
                       <svg
                         viewBox="0 0 24 24"
-                        fill="currentColor"
                         width="14"
                         height="14"
+                        fill={song.liked ? "currentColor" : "none"}
+                        stroke="currentColor"
+                        strokeWidth="1.5"
                       >
-                        <polygon points="5,3 19,12 5,21" />
+                        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                       </svg>
-                    )}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "40px",
-                      height: "40px",
-                      borderRadius: "8px",
-                      background: song.grad || randomGradient(),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "20px",
-                      flexShrink: 0,
-                      overflow: "hidden",
-                    }}
-                  >
-                    {song.artwork ? (
-                      <img
-                        src={song.artwork}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    ) : song.videoId ? (
-                      <img
-                        src={`https://i.ytimg.com/vi/${song.videoId}/default.jpg`}
-                        alt=""
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    ) : (
-                      song.emoji || "🎵"
-                    )}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: 600,
-                        color: isActive ? "var(--accent2)" : "var(--text)",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {song.title}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "12px",
-                        color: "var(--text3)",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {song.artist}
-                    </div>
+                    </button>
                   </div>
                 </div>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--text3)",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {song.album || "—"}
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span
-                    style={{
-                      fontFamily: "'DM Mono', monospace",
-                      fontSize: "9px",
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      padding: "3px 8px",
-                      borderRadius: "20px",
-                      border: "1px solid var(--border2)",
-                      color: "var(--text2)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {song.source === "youtube" ? "YT" : "Local"}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontFamily: "'DM Mono', monospace",
-                    fontSize: "12px",
-                    color: "var(--text3)",
-                    textAlign: "right",
-                  }}
-                >
-                  {song.dur || formatDuration(song.duration || 0)}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleLike(song.id);
-                    }}
-                    style={{
-                      width: "30px",
-                      height: "30px",
-                      borderRadius: "50%",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "transform 0.2s, background 0.15s",
-                      color: song.liked ? "var(--accent2)" : "var(--text3)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "scale(1.2)";
-                      e.currentTarget.style.background =
-                        "rgba(192,132,252,0.15)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "scale(1)";
-                      e.currentTarget.style.background = "none";
-                    }}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="16"
-                      height="16"
-                      fill={song.liked ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
-
-      <div style={{ height: "40px" }} />
     </div>
   );
 };

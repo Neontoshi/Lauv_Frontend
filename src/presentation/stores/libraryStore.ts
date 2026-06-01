@@ -43,6 +43,9 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   toggleLike: (songId, songData) => {
     console.log("[LIKE] toggling:", songId);
 
+    // Find song before optimistic update (to know old liked state)
+    const existingSong = get().songs.find((s) => s.id === songId);
+
     set((state) => {
       const exists = state.songs.find((s) => s.id === songId);
 
@@ -70,15 +73,55 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       };
     });
 
-    // Re-sync filteredSongs so the UI reflects the like change
     get().filterAndSort();
 
+    // Resolve the full song object for backend calls
+    const song =
+      existingSong ??
+      songData ??
+      useYouTubeStore.getState().results.find((s: Song) => s.id === songId);
+
     import("@tauri-apps/api/core").then(({ invoke }) => {
-      invoke("toggle_like", { trackId: songId }).catch((err) => {
-        console.error("[LIKE] backend error:", err);
-      });
+      if (song?.source === "soundcloud") {
+        // toggle_like_soundcloud handles both liked_tracks and liked_songs
+        invoke("toggle_like_soundcloud", {
+          trackId: songId,
+          title: song.title,
+          artist: song.artist,
+          album: song.album || "",
+          durationSecs: song.duration || 0,
+          thumbnail: song.artwork || "",
+          videoId: song.videoId || null,
+          path: song.path || "",
+        }).catch((err) => console.error("[LIKE] soundcloud error:", err));
+      } else if (song?.source === "youtube") {
+        // toggle_like handles liked_tracks; if we're liking we also need liked_songs
+        invoke("toggle_like", { trackId: songId })
+          .then((nowLiked: any) => {
+            if (nowLiked && song) {
+              invoke("save_liked_song", {
+                id: songId,
+                title: song.title,
+                artist: song.artist,
+                album: song.album || "",
+                durationSecs: song.duration || 0,
+                thumbnail: song.artwork || "",
+                videoId: song.videoId || null,
+                source: "youtube",
+                path: song.path || "",
+              }).catch(() => {});
+            }
+          })
+          .catch((err) => console.error("[LIKE] youtube error:", err));
+      } else {
+        // Local song — toggle_like is enough
+        invoke("toggle_like", { trackId: songId }).catch((err) =>
+          console.error("[LIKE] local error:", err),
+        );
+      }
     });
   },
+
   filterAndSort: () => {
     const { songs, searchQuery, activeGenre, activeSort } = get();
     let result = [...songs].filter(

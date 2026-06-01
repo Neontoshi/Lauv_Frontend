@@ -11,6 +11,27 @@ import { tauriCommands } from "../../../services/tauriBridge";
 
 type SearchTab = "library" | "youtube" | "soundcloud";
 
+const MUSIC_EMOJIS = [
+  "🎵",
+  "🎶",
+  "🎧",
+  "🎼",
+  "🎹",
+  "🎸",
+  "🎤",
+  "🥁",
+  "🎺",
+  "🎷",
+  "🪕",
+  "🎻",
+  "💿",
+  "📻",
+  "🔊",
+  "🎙️",
+];
+const randomEmoji = () =>
+  MUSIC_EMOJIS[Math.floor(Math.random() * MUSIC_EMOJIS.length)];
+
 const LibraryView: React.FC = () => {
   const { songs: localSongs, setActiveSort, loading } = useLibrary();
   const { searchQuery, setSearchQuery } = useUIStore();
@@ -48,6 +69,7 @@ const LibraryView: React.FC = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
   useEffect(() => {
     if (!searchQuery.trim()) return;
     const timer = setTimeout(() => {
@@ -70,7 +92,7 @@ const LibraryView: React.FC = () => {
               source: "soundcloud" as any,
               videoId: r.id,
               dur: r.duration_str,
-              emoji: "☁️",
+              emoji: randomEmoji(),
               grad: "linear-gradient(135deg, #ff8800, #ff5500)",
               bpm: 0,
               key: "—",

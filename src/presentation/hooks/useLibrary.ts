@@ -36,6 +36,7 @@ export const useLibrary = () => {
     try {
       const currentSongs = useLibraryStore.getState().songs;
       if (!forceRescan && currentSongs.length > 0) {
+        const likedIds = new Set<string>(await tauriCommands.getLikedSongs());
         const likedFull: any[] = await tauriCommands.getLikedSongsFull();
         const existingPaths = new Set(currentSongs.map((s: any) => s.path));
         const newSongs = likedFull
@@ -50,7 +51,7 @@ export const useLibrary = () => {
             videoId: s.video_id,
             source: s.source,
             path: s.path,
-            liked: true,
+            liked: likedIds.has(s.id),
             dur: "",
             emoji: "🎵",
             grad: "linear-gradient(135deg, #7c6af5, #4a3fd4)",
@@ -60,9 +61,7 @@ export const useLibrary = () => {
           }));
         const updated = currentSongs.map((s: any) => ({
           ...s,
-          liked: likedFull.some((ls: any) =>
-            s.source === "youtube" ? ls.id === s.id : ls.path === s.path,
-          ),
+          liked: likedIds.has(s.id),
         }));
         setSongs([...updated, ...newSongs]);
         return;
@@ -75,12 +74,12 @@ export const useLibrary = () => {
       const loadedSongs = forceRescan
         ? await (songRepo as any).rescanLibrary()
         : await songRepo.getAllSongs();
+      const likedIds = new Set<string>(await tauriCommands.getLikedSongs());
       const likedFull: any[] = await tauriCommands.getLikedSongsFull();
+
       let updated = loadedSongs.map((s: any) => ({
         ...s,
-        liked: likedFull.some((ls: any) =>
-          s.source === "youtube" ? ls.id === s.id : ls.path === s.path,
-        ),
+        liked: likedIds.has(s.id),
       }));
 
       const existingPaths = new Set(updated.map((s: any) => s.path));
@@ -96,7 +95,7 @@ export const useLibrary = () => {
           videoId: s.video_id,
           source: s.source,
           path: s.path,
-          liked: true,
+          liked: likedIds.has(s.id),
           dur: "",
           emoji: "🎵",
           grad: "linear-gradient(135deg, #7c6af5, #4a3fd4)",

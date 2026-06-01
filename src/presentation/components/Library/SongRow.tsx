@@ -55,14 +55,12 @@ const SongRow: React.FC<SongRowProps> = ({
   );
   const isLiked = likedIds.has(song.id) || song.liked;
 
-  // FIX #12: Consolidate all playerStore reads into one selector to reduce re-renders
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const isLoading = usePlayerStore((s) => s.isLoading);
   const currentSongId = usePlayerStore((s) => s.currentSong?.id);
   const setMessage = usePlayerStore((s) => s.setMessage);
   const setError = usePlayerStore((s) => s.setError);
 
-  // FIX #7: Only show spinner if THIS song is loading
   const isThisSongLoading =
     isLoading && currentSongId === song.id && !isPlaying;
   const [isDownloading, setIsDownloading] = React.useState(false);
@@ -73,12 +71,10 @@ const SongRow: React.FC<SongRowProps> = ({
   const playlistMenuRef = React.useRef<HTMLDivElement>(null);
   const isLikingRef = React.useRef(false);
 
-  // FIX #10: Use typed comparison rather than casting
   const isYouTube = song.source === "youtube";
   const isSoundCloud = song.source === "soundcloud";
   const isStreamable = isYouTube || isSoundCloud;
 
-  // FIX #8: Use an isMounted ref to avoid setState on unmounted component
   React.useEffect(() => {
     let cancelled = false;
     if (!song.videoId) return;
@@ -108,7 +104,6 @@ const SongRow: React.FC<SongRowProps> = ({
       .catch(() => {});
   }, [showPlaylistMenu]);
 
-  // FIX #4: Use mousedown consistently for both open and close detection
   React.useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (
@@ -164,7 +159,6 @@ const SongRow: React.FC<SongRowProps> = ({
       try {
         toggleLike(song.id, isLiked ? undefined : song);
         await tauriCommands.toggleLike(song.id);
-        // Also save full song data for liked page
         if (!isLiked) {
           await tauriCommands.saveLikedSong({
             id: song.id,
@@ -190,7 +184,6 @@ const SongRow: React.FC<SongRowProps> = ({
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // FIX #3: Guard against non-streamable sources even if called directly
     if (!song.videoId || isDownloading || isDownloaded || !isStreamable) return;
 
     setIsDownloading(true);
@@ -201,7 +194,6 @@ const SongRow: React.FC<SongRowProps> = ({
         await tauriCommands.downloadSoundcloud(song.videoId, song.title);
       }
       setIsDownloaded(true);
-      // FIX #14: Use store actions from hook, not getState()
       setMessage(`Downloaded "${song.title}"`);
       setTriggerReload();
     } catch (err) {
@@ -212,7 +204,6 @@ const SongRow: React.FC<SongRowProps> = ({
     }
   };
 
-  // FIX #11: Explicit return type; handle undefined emoji gracefully
   const renderThumb = (): React.ReactNode => {
     if (song.artwork) {
       return (
@@ -248,7 +239,6 @@ const SongRow: React.FC<SongRowProps> = ({
     return song.emoji ?? null;
   };
 
-  // FIX #5: Compute the correct thumbnail for playlist add, per source
   const getPlaylistThumbnail = (): string => {
     if (song.artwork) return song.artwork;
     if (isYouTube && song.videoId)
@@ -316,21 +306,23 @@ const SongRow: React.FC<SongRowProps> = ({
       <div className="song-dur">{song.dur}</div>
 
       <div className="song-actions">
-        {/* Like button */}
-        <div
-          className={`sm-btn ${isLiked ? "liked" : ""}`}
-          onClick={handleLike}
-          title={isLiked ? "Unlike" : "Like"}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill={isLiked ? "currentColor" : "none"}
-            stroke="currentColor"
-            strokeWidth="2"
+        {/* Like button — streams only */}
+        {isStreamable && (
+          <div
+            className={`sm-btn ${isLiked ? "liked" : ""}`}
+            onClick={handleLike}
+            title={isLiked ? "Unlike" : "Like"}
           >
-            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-          </svg>
-        </div>
+            <svg
+              viewBox="0 0 24 24"
+              fill={isLiked ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+            </svg>
+          </div>
+        )}
 
         {/* Download button — YouTube and SoundCloud only */}
         {isStreamable && (

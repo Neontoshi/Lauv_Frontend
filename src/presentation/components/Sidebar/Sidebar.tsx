@@ -109,7 +109,6 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
       label: "Songs",
       icon: SongsIcon,
     },
-    { path: "/albums", label: "Albums", icon: AlbumsIcon },
     { path: "/artists", label: "Artists", icon: ArtistsIcon },
     { path: "/liked", label: "Liked", icon: LikedIcon },
   ];
@@ -192,11 +191,11 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
             Explore
           </div>
           <div
-            className={`nav-item ${location.pathname === "/trending" ? "active" : ""}`}
-            onClick={() => navigate("/trending")}
+            className={`nav-item ${location.pathname === "/for-you" ? "active" : ""}`}
+            onClick={() => navigate("/for-you")}
           >
             <TrendingIcon />
-            Trending
+            For You
           </div>
           <div
             className={`nav-item ${location.pathname === "/radio" ? "active" : ""}`}
@@ -282,7 +281,6 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
                 {pl.emoji || "🎵"}
               </div>
               <span className="playlist-name">{pl.name}</span>
-              <span className="playlist-count">{pl.song_count}</span>
             </div>
           ))}
         </div>
