@@ -26,7 +26,7 @@ class ServiceProvider {
     if (!this.playerRepository) {
       this.playerRepository = new TauriPlayerRepository();
     }
-    return this.playerRepository;
+    return this.playerRepository!;
   }
 }
 

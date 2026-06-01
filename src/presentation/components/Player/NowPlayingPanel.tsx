@@ -69,6 +69,10 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
 }) => {
   const { currentSong, currentProgress, isPlaying } = usePlayer();
   const { toggleLike } = useLibraryStore();
+  const isLiked = useLibraryStore((s) => {
+    const inStore = s.songs.find((x) => x.id === currentSong?.id);
+    return inStore ? inStore.liked : (currentSong?.liked ?? false);
+  });
   const { setCurrentSong, setProgress } = usePlayerStore();
   const { queue, currentIndex } = useQueueStore();
 
@@ -148,6 +152,48 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
     return () => clearTimeout(timer);
   }, [activeIdx]);
 
+  const handleLike = async () => {
+    if (!currentSong) return;
+    const song = currentSong;
+    const isSC = song.source === "soundcloud";
+    try {
+      if (isSC) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const result = await invoke<boolean>("toggle_like_soundcloud", {
+          trackId: song.id,
+          title: song.title,
+          artist: song.artist,
+          album: song.album || "SoundCloud",
+          durationSecs: song.duration || 0,
+          thumbnail: song.artwork || "",
+          videoId: song.videoId || null,
+          path: song.path || "",
+        });
+        toggleLike(song.id, song.liked ? undefined : song);
+        song.liked = result;
+      } else {
+        toggleLike(song.id, song.liked ? undefined : song);
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("toggle_like", { trackId: song.id });
+        if (!song.liked) {
+          await invoke("save_liked_song", {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album || "",
+            durationSecs: song.duration || 0,
+            thumbnail: song.artwork || "",
+            videoId: song.videoId || null,
+            source: song.source || "local",
+            path: song.path || "",
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Like failed:", err);
+    }
+  };
+
   // ── Empty state ────────────────────────────────────────────────────────────
 
   if (!currentSong) {
@@ -225,12 +271,12 @@ const NowPlayingPanel: React.FC<NowPlayingPanelProps> = ({
           </div>
         </div>
         <button
-          className={`np-like-btn ${currentSong.liked ? "liked" : ""}`}
-          onClick={() => toggleLike(currentSong.id)}
+          className={`np-like-btn ${isLiked ? "liked" : ""}`}
+          onClick={handleLike}
         >
           <svg
             viewBox="0 0 24 24"
-            fill={currentSong.liked ? "currentColor" : "none"}
+            fill={isLiked ? "currentColor" : "none"}
             stroke="currentColor"
             strokeWidth="2"
           >

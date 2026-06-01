@@ -42,13 +42,15 @@ const LibraryView: React.FC = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (searchQuery.trim()) {
+    if (!searchQuery.trim()) return;
+    const timer = setTimeout(() => {
       searchYouTube(searchQuery);
-    }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
-
   useEffect(() => {
-    if (searchQuery.trim()) {
+    if (!searchQuery.trim()) return;
+    const timer = setTimeout(() => {
       setIsScSearching(true);
       tauriCommands
         .searchSoundcloud(searchQuery)
@@ -79,7 +81,8 @@ const LibraryView: React.FC = () => {
           setIsScSearching(false);
         })
         .catch(() => setIsScSearching(false));
-    }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [searchQuery]);
 
   const displaySongs: Song[] = useMemo(() => {

@@ -50,6 +50,10 @@ const SongRow: React.FC<SongRowProps> = ({
 }) => {
   const toggleLike = useLibraryStore((s) => s.toggleLike);
   const setTriggerReload = useLibraryStore((s) => s.setTriggerReload);
+  const likedIds = useLibraryStore(
+    (s) => new Set(s.songs.filter((x) => x.liked).map((x) => x.id)),
+  );
+  const isLiked = likedIds.has(song.id) || song.liked;
 
   // FIX #12: Consolidate all playerStore reads into one selector to reduce re-renders
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -67,6 +71,7 @@ const SongRow: React.FC<SongRowProps> = ({
   const [showPlaylistMenu, setShowPlaylistMenu] = React.useState(false);
   const [playlists, setPlaylists] = React.useState<Playlist[]>([]);
   const playlistMenuRef = React.useRef<HTMLDivElement>(null);
+  const isLikingRef = React.useRef(false);
 
   // FIX #10: Use typed comparison rather than casting
   const isYouTube = song.source === "youtube";
@@ -119,10 +124,12 @@ const SongRow: React.FC<SongRowProps> = ({
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLikingRef.current) return;
+    isLikingRef.current = true;
 
     if (isSoundCloud) {
       try {
-        await tauriCommands.toggleLikeSoundcloud({
+        const result = await tauriCommands.toggleLikeSoundcloud({
           trackId: song.id,
           title: song.title,
           artist: song.artist,
@@ -132,23 +139,55 @@ const SongRow: React.FC<SongRowProps> = ({
           videoId: song.videoId,
           path: song.path || "",
         });
-        // Toggle UI only - don't call toggleLike which re-inserts into liked_tracks
-        toggleLike(song.id);
+
+        const store = useLibraryStore.getState();
+        const exists = store.songs.find((s) => s.id === song.id);
+
+        if (!exists) {
+          store.setSongs([...store.songs, { ...song, liked: result }]);
+        } else {
+          store.setSongs(
+            store.songs.map((s) =>
+              s.id === song.id ? { ...s, liked: result } : s,
+            ),
+          );
+        }
+        store.filterAndSort();
+        song.liked = result;
       } catch (err) {
-        console.error("Failed to toggle like:", err);
+        console.error("SC LIKE ERROR:", err);
         setError("Failed to save like");
+      } finally {
+        isLikingRef.current = false;
       }
     } else {
-      toggleLike(song.id, song.liked ? undefined : song);
       try {
+        toggleLike(song.id, isLiked ? undefined : song);
         await tauriCommands.toggleLike(song.id);
+        // Also save full song data for liked page
+        if (!isLiked) {
+          await tauriCommands.saveLikedSong({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album || "",
+            durationSecs: song.duration || 0,
+            thumbnail: song.artwork || "",
+            videoId: song.videoId,
+            source: song.source || "local",
+            path: song.path || "",
+          });
+        }
       } catch (err) {
         console.error("Failed to toggle like:", err);
         toggleLike(song.id);
         setError("Failed to save like");
+      } finally {
+        isLikingRef.current = false;
       }
     }
   };
+
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     // FIX #3: Guard against non-streamable sources even if called directly
@@ -277,15 +316,15 @@ const SongRow: React.FC<SongRowProps> = ({
       <div className="song-dur">{song.dur}</div>
 
       <div className="song-actions">
-        {/* Like button - now works instantly for both YouTube and SoundCloud */}
+        {/* Like button */}
         <div
-          className={`sm-btn ${song.liked ? "liked" : ""}`}
+          className={`sm-btn ${isLiked ? "liked" : ""}`}
           onClick={handleLike}
-          title={song.liked ? "Unlike" : "Like"}
+          title={isLiked ? "Unlike" : "Like"}
         >
           <svg
             viewBox="0 0 24 24"
-            fill={song.liked ? "currentColor" : "none"}
+            fill={isLiked ? "currentColor" : "none"}
             stroke="currentColor"
             strokeWidth="2"
           >

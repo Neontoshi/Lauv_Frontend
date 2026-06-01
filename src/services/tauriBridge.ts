@@ -65,7 +65,7 @@ export const tauriCommands = {
     handleInvoke("get_metadata", { path }),
 
   // Player
-  playTrack: (song: Song): Promise<void> => {
+  playTrack: (song: Song): Promise<number> => {
     const {
       artwork,
       dur,
@@ -82,7 +82,6 @@ export const tauriCommands = {
     const payload = source ? { ...rest, source } : rest;
     return handleInvoke("play_track", { song: payload });
   },
-
   pausePlayback: (): Promise<void> => handleInvoke("pause_playback"),
 
   resumePlayback: (): Promise<void> => handleInvoke("resume_playback"),
@@ -139,6 +138,21 @@ export const tauriCommands = {
   checkSoundcloudDownloadExists: (videoId: string): Promise<boolean> =>
     handleInvoke("check_soundcloud_download_exists", { videoId }),
 
+  // Artists
+  saveArtist: (
+    name: string,
+    thumbnail: string | null,
+    source: string,
+  ): Promise<void> => handleInvoke("save_artist", { name, thumbnail, source }),
+
+  removeArtist: (artistId: string): Promise<void> =>
+    handleInvoke("remove_artist", { artistId }),
+
+  getSavedArtists: (): Promise<any[]> => handleInvoke("get_saved_artists"),
+
+  searchArtistForSave: (query: string): Promise<any[]> =>
+    handleInvoke("search_artist_for_save", { query }),
+
   // Settings
   getSetting: (key: string): Promise<string | null> =>
     handleInvoke("get_setting", { key }),
@@ -164,6 +178,23 @@ export const tauriCommands = {
 
   getRecentlyPlayed: (limit?: number) =>
     handleInvoke("get_recently_played", { limit }),
+
+  // Radio
+  getPopularStations: (): Promise<any[]> =>
+    handleInvoke("get_popular_stations"),
+  searchRadioStations: (query: string): Promise<any[]> =>
+    handleInvoke("search_radio_stations", { query }),
+  getStationsByGenre: (genre: string): Promise<any[]> =>
+    handleInvoke("get_stations_by_genre", { genre }),
+  saveRadioStation: (station: any): Promise<void> =>
+    handleInvoke("save_radio_station", { station }),
+  getSavedStations: (): Promise<any[]> => handleInvoke("get_saved_stations"),
+  removeRadioStation: (stationId: string): Promise<void> =>
+    handleInvoke("remove_radio_station", { stationId }),
+  toggleRecording: (url: string): Promise<string> =>
+    handleInvoke("toggle_recording", { url }),
+  isRecording: (): Promise<boolean> => handleInvoke("is_recording"),
+  getRecordingName: (): Promise<string> => handleInvoke("get_recording_name"),
 
   // Liked songs
   getLikedSongs: (): Promise<string[]> => handleInvoke("get_liked_songs"),
@@ -244,6 +275,9 @@ export const tauriCommands = {
 
   removeFromPlaylist: (playlistId: string, songId: string): Promise<void> =>
     handleInvoke("remove_from_playlist", { playlistId, songId }),
+
+  removePlaylist: (playlistId: string): Promise<void> =>
+    handleInvoke("remove_playlist", { playlistId }),
 
   // Utilities
   checkYtdlp: (): Promise<string> => handleInvoke("check_ytdlp"),

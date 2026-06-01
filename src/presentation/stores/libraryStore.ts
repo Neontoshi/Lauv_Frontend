@@ -70,6 +70,9 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
       };
     });
 
+    // Re-sync filteredSongs so the UI reflects the like change
+    get().filterAndSort();
+
     import("@tauri-apps/api/core").then(({ invoke }) => {
       invoke("toggle_like", { trackId: songId }).catch((err) => {
         console.error("[LIKE] backend error:", err);
@@ -78,8 +81,15 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
   },
   filterAndSort: () => {
     const { songs, searchQuery, activeGenre, activeSort } = get();
-    let result = [...songs].filter((s) => s.source !== "youtube");
-
+    let result = [...songs].filter(
+      (s) => s.source !== "youtube" && s.source !== "soundcloud",
+    );
+    console.log(
+      "filterAndSort: songs=",
+      songs.length,
+      "filtered=",
+      result.length,
+    );
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(

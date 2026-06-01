@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "../stores/playerStore";
 import { useQueueStore } from "../stores/queueStore";
 import { tauriCommands } from "../../services/tauriBridge";
@@ -70,6 +70,7 @@ const PlayingBars = () => (
 
 const PlaylistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [songs, setSongs] = useState<any[]>([]);
   const [playlist, setPlaylist] = useState<any>(null);
   const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set());
@@ -129,6 +130,16 @@ const PlaylistDetailPage: React.FC = () => {
       loadData();
     } catch (err) {
       console.error("Failed to remove song:", err);
+    }
+  };
+
+  const handleDeletePlaylist = async () => {
+    if (!confirm(`Delete "${playlist?.name}"? This cannot be undone.`)) return;
+    try {
+      await tauriCommands.removePlaylist(id!);
+      navigate("/playlists");
+    } catch (err) {
+      console.error("Failed to delete playlist:", err);
     }
   };
 
@@ -264,6 +275,37 @@ const PlaylistDetailPage: React.FC = () => {
           >
             <polygon points="5,3 19,12 5,21" />
           </svg>
+        </button>
+
+        <button
+          onClick={handleDeletePlaylist}
+          style={{
+            padding: "10px 20px",
+            borderRadius: "100px",
+            background: "transparent",
+            border: "1px solid var(--red)",
+            color: "var(--red)",
+            cursor: "pointer",
+            fontFamily: "'Syne', sans-serif",
+            fontSize: "12px",
+            fontWeight: 600,
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+          </svg>
+          Delete Playlist
         </button>
       </div>
 
@@ -534,7 +576,6 @@ const PlaylistDetailPage: React.FC = () => {
                   alignItems: "center",
                   justifyContent: "flex-end",
                   gap: "4px",
-                  opacity: currentSongIndex === i ? 1 : 0,
                 }}
               >
                 <button

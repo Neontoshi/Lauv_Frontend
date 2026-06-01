@@ -283,7 +283,7 @@ const HomePage: React.FC = () => {
   const recentlyAdded = useMemo(() => songs.slice(0, 8), [songs]);
   const quickPicks = useMemo(() => shuffle(songs).slice(0, 6), [songs]);
   const likedSongsPreview = useMemo(
-    () => songs.filter((s) => s.liked).slice(0, 8),
+    () => songs.filter((s) => s.liked).slice(0, 12),
     [songs],
   );
 
@@ -447,9 +447,7 @@ const HomePage: React.FC = () => {
                 marginTop: "0.9rem",
                 letterSpacing: "0.05em",
               }}
-            >
-              {songs.length} songs · updated today
-            </div>
+            ></div>
           </div>
           <div
             style={{
@@ -466,6 +464,7 @@ const HomePage: React.FC = () => {
                 textAlign: "center",
                 background: "var(--surface)",
                 borderRight: "1px solid var(--border)",
+                minWidth: "90px",
               }}
             >
               <div
@@ -497,6 +496,7 @@ const HomePage: React.FC = () => {
                 textAlign: "center",
                 background: "var(--surface)",
                 borderRight: "1px solid var(--border)",
+                minWidth: "90px",
               }}
             >
               <div
@@ -528,6 +528,7 @@ const HomePage: React.FC = () => {
                 textAlign: "center",
                 background: "var(--surface)",
                 borderRight: "1px solid var(--border)",
+                minWidth: "90px",
               }}
             >
               <div
@@ -595,7 +596,7 @@ const HomePage: React.FC = () => {
             title="Radio"
             count="Infinite similar music"
             colorClass="orange"
-            onClick={() => {}}
+            onClick={() => navigate("/radio")}
           />
         </div>
 

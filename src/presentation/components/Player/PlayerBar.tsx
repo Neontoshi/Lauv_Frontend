@@ -17,7 +17,7 @@ const PlayerBar: React.FC = () => {
     toggleShuffle,
     toggleRepeat,
   } = usePlayer();
-  const isLoading = usePlayerStore().isLoading;
+  const isLoading = usePlayerStore((s) => s.isLoading);
   if (!currentSong) {
     return (
       <div

@@ -1,5 +1,4 @@
 import React from "react";
-import { useLibraryStore } from "../../stores/libraryStore";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // ========== ICON COMPONENTS ==========
@@ -89,7 +88,6 @@ const MOODS = [
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ className }) => {
-  const { songs } = useLibraryStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [playlists, setPlaylists] = React.useState<any[]>([]);
@@ -103,13 +101,15 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
   >("private");
   const [isCreating, setIsCreating] = React.useState(false);
 
-  const albumCount = songs ? new Set(songs.map((s: any) => s.album)).size : 0;
-
   const navItems = [
     { path: "/", label: "Home", icon: HomeIcon },
     { path: "/nowplaying", label: "Now Playing", icon: NowPlayingIcon },
-    { path: "/songs", label: "Songs", icon: SongsIcon, badge: songs?.length },
-    { path: "/albums", label: "Albums", icon: AlbumsIcon, badge: albumCount },
+    {
+      path: "/songs",
+      label: "Songs",
+      icon: SongsIcon,
+    },
+    { path: "/albums", label: "Albums", icon: AlbumsIcon },
     { path: "/artists", label: "Artists", icon: ArtistsIcon },
     { path: "/liked", label: "Liked", icon: LikedIcon },
   ];
@@ -177,9 +177,6 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
               >
                 <Icon />
                 {item.label}
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className="nav-badge">{item.badge}</span>
-                )}
               </div>
             );
           })}

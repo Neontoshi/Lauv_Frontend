@@ -1,7 +1,7 @@
 import { Song } from "../entities/Song";
 
 export interface IPlayerRepository {
-  play(song: Song): Promise<void>;
+  play(song: Song): Promise<number>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   stop(): Promise<void>;

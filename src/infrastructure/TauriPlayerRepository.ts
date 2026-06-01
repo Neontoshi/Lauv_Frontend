@@ -5,8 +5,8 @@ import { tauriCommands, tauriEvents } from "../services/tauriBridge";
 export class TauriPlayerRepository implements IPlayerRepository {
   private volumeCache = 70;
 
-  async play(song: Song): Promise<void> {
-    await tauriCommands.playTrack(song);
+  async play(song: Song): Promise<number> {
+    return await tauriCommands.playTrack(song);
   }
 
   async pause(): Promise<void> {
@@ -16,6 +16,7 @@ export class TauriPlayerRepository implements IPlayerRepository {
   async resume(): Promise<void> {
     await tauriCommands.resumePlayback();
   }
+
   async stop(): Promise<void> {
     await tauriCommands.stopPlayback();
   }
@@ -45,9 +46,7 @@ export class TauriPlayerRepository implements IPlayerRepository {
     return state.duration;
   }
 
-  reset(): void {
-    // State is managed by usePlayer hook
-  }
+  reset(): void {}
 
   onPlaybackUpdate(
     callback: (

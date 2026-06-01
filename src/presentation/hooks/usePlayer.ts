@@ -36,26 +36,26 @@ export const usePlayer = () => {
   const songEndHandled = useRef(false);
   const streamingVideoId = useRef<string | null>(null);
   const scrobbledRef = useRef(false);
-
-  // 🔥 FIX #6: Play lock to prevent race conditions
   const playLockRef = useRef(false);
   const urlCache = useRef<Map<string, string>>(new Map());
+
   const playSong = useCallback(async (song: typeof currentSong) => {
     if (playLockRef.current) {
       console.debug("[usePlayer] Play locked, skipping duplicate call");
       return;
     }
 
-    currentTrackIdRef.current += 1;
     if (!song) return;
     if (song.id === lastPlayedId.current) return;
     if (song.id === pendingPlayId.current) return;
     if (song.videoId && streamingVideoId.current === song.videoId) return;
 
     playLockRef.current = true;
+    let loadingStart = 0;
 
     try {
       playerRepo.current.reset();
+      usePlayerStore.getState().setError(null);
       scrobbledRef.current = false;
 
       const wasPaused = !usePlayerStore.getState().isPlaying;
@@ -67,12 +67,10 @@ export const usePlayer = () => {
         streamingVideoId.current = song.videoId;
       }
 
+      currentTrackIdRef.current = Number.MAX_SAFE_INTEGER; // 👈 block stale events immediately
       songEndHandled.current = false;
-
-      const { setDuration } = usePlayerStore.getState();
-
       setProgress(0);
-      setDuration(0);
+      usePlayerStore.getState().setDuration(0);
       songEndHandled.current = false;
       streamingVideoId.current = song.videoId ?? null;
 
@@ -88,6 +86,7 @@ export const usePlayer = () => {
       if (isStream) {
         isLoadingRef.current = true;
         usePlayerStore.getState().setIsLoading(true);
+        loadingStart = Date.now();
       }
 
       if (
@@ -103,13 +102,17 @@ export const usePlayer = () => {
               : await tauriCommands.resolveSoundcloudUrl(song.videoId);
           urlCache.current.set(song.videoId, resolvedUrl);
         }
-        await playerRepo.current.play({
+        currentTrackIdRef.current = Date.now();
+        const trackId = await playerRepo.current.play({
           ...song,
           path: resolvedUrl,
           source: "local",
         });
+        currentTrackIdRef.current = trackId;
       } else {
-        await playerRepo.current.play(song);
+        currentTrackIdRef.current = Date.now();
+        const trackId = await playerRepo.current.play(song);
+        currentTrackIdRef.current = trackId;
       }
 
       if (wasPaused) {
@@ -134,12 +137,26 @@ export const usePlayer = () => {
         })
         .catch(() => {});
     } catch (err) {
-      console.error("Failed to play song:", err);
+      currentTrackIdRef.current = Number.MAX_SAFE_INTEGER;
+      lastPlayedId.current = null;
       streamingVideoId.current = null;
+      isLoadingRef.current = false;
+      usePlayerStore.getState().setIsLoading(false);
       usePlayerStore.getState().setError(String(err));
+      usePlayerStore.getState().setPlaying(false);
+      usePlayerStore.getState().setProgress(0);
+      usePlayerStore.getState().setDuration(0);
     } finally {
+      if (loadingStart) {
+        const elapsed = Date.now() - loadingStart;
+        if (elapsed < 300) {
+          await new Promise((r) => setTimeout(r, 300 - elapsed));
+        }
+      }
       pendingPlayId.current = null;
       playLockRef.current = false;
+      isLoadingRef.current = false;
+      usePlayerStore.getState().setIsLoading(false); // 👈 add back
     }
   }, []);
 
@@ -151,13 +168,11 @@ export const usePlayer = () => {
   const handleNext = useCallback(() => {
     const state = usePlayerStore.getState();
     const nextSong = getNextSong(state.isShuffle, state.repeatMode);
-    const { setDuration } = usePlayerStore.getState();
-
     if (nextSong) {
       lastPlayedId.current = null;
       setCurrentSong(nextSong);
       setProgress(0);
-      setDuration(0);
+      usePlayerStore.getState().setDuration(0);
       ignorePositionUntil.current = Date.now() + 120;
     }
   }, [getNextSong, setCurrentSong, setProgress]);
@@ -176,26 +191,23 @@ export const usePlayer = () => {
           store.setPlaying(backendIsPlaying);
         }
 
-        // HIDE SPINNER AFTER 4 SECONDS OF PLAYBACK
-        if (isLoadingRef.current && position >= 0.000001) {
+        if (isLoadingRef.current) {
           isLoadingRef.current = false;
           store.setIsLoading(false);
+        }
+
+        if (Date.now() < ignorePositionUntil.current) {
+          return;
         }
 
         if (store.duration === 0 && duration > 0) {
           store.setDuration(duration);
         }
-        if (Date.now() < ignorePositionUntil.current) {
-          if (position > 0 || duration > 0) {
-            ignorePositionUntil.current = 0;
-          } else {
-            return;
-          }
-        }
 
         if (isSeekingRef.current) {
           return;
         }
+
         const now = Date.now();
         if (now - lastUpdate > 80) {
           lastUpdate = now;
@@ -243,7 +255,6 @@ export const usePlayer = () => {
           !songEndHandled.current
         ) {
           songEndHandled.current = true;
-
           if (store.repeatMode === 2) {
             playerRepo.current.seek(0);
             playerRepo.current.resume();
@@ -264,7 +275,6 @@ export const usePlayer = () => {
     playerRepo.current.setVolume(effectiveVolume);
   }, [volume, isMuted]);
 
-  // Listen for tray events
   useEffect(() => {
     let unlisten1: (() => void) | null = null;
     let unlisten2: (() => void) | null = null;
@@ -298,15 +308,10 @@ export const usePlayer = () => {
   const togglePlay = async () => {
     const current = usePlayerStore.getState().isPlaying;
     const next = !current;
-
     setPlaying(next);
-
     try {
-      if (current) {
-        await playerRepo.current.pause();
-      } else {
-        await playerRepo.current.resume();
-      }
+      if (current) await playerRepo.current.pause();
+      else await playerRepo.current.resume();
     } catch (err) {
       setPlaying(current);
       console.error(err);
@@ -316,13 +321,11 @@ export const usePlayer = () => {
   const seek = async (position: number) => {
     isSeekingRef.current = true;
     setProgress(position);
-
     try {
       await playerRepo.current.seek(position);
     } catch (err) {
       console.error("Seek failed:", err);
     }
-
     setTimeout(() => {
       isSeekingRef.current = false;
     }, 250);

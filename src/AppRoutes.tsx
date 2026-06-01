@@ -8,7 +8,9 @@ import AlbumsPage from "./presentation/pages/AlbumsPage";
 import ArtistsPage from "./presentation/pages/ArtistsPage";
 import LikedPage from "./presentation/pages/LikedPage";
 import NowPlayingPage from "./presentation/pages/NowPlayingPage";
+import ExplorePage from "./presentation/pages/ExplorePage";
 import PlaylistDetailPage from "./presentation/pages/PlaylistDetailPage";
+import RadioPage from "./presentation/pages/RadioPage";
 
 function AppRoutes() {
   return (
@@ -19,11 +21,14 @@ function AppRoutes() {
           <Route path="/songs" element={<SongsPage />} />
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/artists" element={<ArtistsPage />} />
+          <Route path="/artists/:artistName" element={<ArtistsPage />} />
           <Route path="/liked" element={<LikedPage />} />
           <Route path="/nowplaying" element={<NowPlayingPage />} />
           <Route path="/playlists" element={<PlaylistsPage />} />
           <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/radio" element={<RadioPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
