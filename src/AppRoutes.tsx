@@ -12,6 +12,8 @@ import ExplorePage from "./presentation/pages/ExplorePage";
 import PlaylistDetailPage from "./presentation/pages/PlaylistDetailPage";
 import RadioPage from "./presentation/pages/RadioPage";
 import ForYouPage from "./presentation/pages/ForYouPage";
+import PodcastPage from "./presentation/pages/PodcastPage";
+import AudiobooksPage from "./presentation/pages/AudiobooksPage";
 
 function AppRoutes() {
   return (
@@ -23,6 +25,8 @@ function AppRoutes() {
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/artists" element={<ArtistsPage />} />
           <Route path="/for-you" element={<ForYouPage />} />
+          <Route path="/podcasts" element={<PodcastPage />} />
+          <Route path="/audiobooks" element={<AudiobooksPage />} />
           <Route path="/artists/:artistName" element={<ArtistsPage />} />
           <Route path="/liked" element={<LikedPage />} />
           <Route path="/nowplaying" element={<NowPlayingPage />} />

@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
 import { useQueueStore } from "../stores/queueStore";
+import { useSystemStore } from "../stores/systemStore";
 import { tauriCommands } from "../../services/tauriBridge";
 import { Song } from "../../core/entities/Song";
 
@@ -39,6 +39,7 @@ const ALL_GENRES = [
   "indie",
   "alternative",
 ];
+
 const MUSIC_EMOJIS = [
   "🎵",
   "🎶",
@@ -60,42 +61,6 @@ const MUSIC_EMOJIS = [
 const randomEmoji = () =>
   MUSIC_EMOJIS[Math.floor(Math.random() * MUSIC_EMOJIS.length)];
 
-//@ts-ignore
-const GENRE_COLORS: Record<string, string> = {
-  pop: "#f472b6",
-  rock: "#fb923c",
-  jazz: "#fbbf24",
-  classical: "#a78bfa",
-  electronic: "#38bdf8",
-  "hip hop": "#c084fc",
-  "r&b": "#f43f5e",
-  country: "#86efac",
-  reggae: "#4ade80",
-  blues: "#60a5fa",
-  metal: "#94a3b8",
-  punk: "#fb7185",
-  folk: "#a3e635",
-  soul: "#f97316",
-  funk: "#e879f9",
-  disco: "#facc15",
-  house: "#818cf8",
-  techno: "#67e8f9",
-  trance: "#c084fc",
-  ambient: "#7dd3fc",
-  "drum and bass": "#fb923c",
-  dubstep: "#a78bfa",
-  lofi: "#86efac",
-  chillout: "#7dd3fc",
-  lounge: "#f9a8d4",
-  gospel: "#fbbf24",
-  latin: "#f97316",
-  afrobeats: "#4ade80",
-  "k-pop": "#f472b6",
-  indie: "#a78bfa",
-  alternative: "#38bdf8",
-};
-
-// 30 YouTube query variants → ~300 songs (10 per search × 30 queries)
 const YT_SEARCH_QUERIES = [
   (genre: string) => `${genre} music`,
   (genre: string) => `${genre} songs`,
@@ -109,22 +74,9 @@ const YT_SEARCH_QUERIES = [
   (genre: string) => `${genre} official`,
   (genre: string) => `${genre} vevo`,
   (genre: string) => `greatest ${genre}`,
-  (genre: string) => `${genre} hits 2024`,
   (genre: string) => `${genre} bangers`,
   (genre: string) => `${genre} essentials`,
-  (genre: string) => `${genre} underground`,
-  (genre: string) => `${genre} new releases`,
   (genre: string) => `${genre} top 50`,
-  (genre: string) => `${genre} legendary tracks`,
-  (genre: string) => `${genre} artists`,
-  (genre: string) => `${genre} hits 2023`,
-  (genre: string) => `${genre} radio`,
-  (genre: string) => `${genre} live`,
-  (genre: string) => `${genre} acoustic`,
-  (genre: string) => `${genre} remix`,
-  (genre: string) => `${genre} deep cuts`,
-  (genre: string) => `${genre} throwback`,
-  (genre: string) => `${genre} top songs ever`,
   (genre: string) => `${genre} trending`,
 ];
 
@@ -132,12 +84,40 @@ const SC_SEARCH_QUERIES = [
   (genre: string) => `${genre} music`,
   (genre: string) => `${genre} mix`,
   (genre: string) => `${genre} original`,
-  (genre: string) => `${genre} upload`,
-  (genre: string) => `${genre} indie`,
 ];
 
-const BATCH_SIZE = 1; // fetch 3 YouTube queries at a time
-const BATCH_DELAY = 1500; // ms between batches
+const BATCH_SIZE = 2;
+const BATCH_DELAY = 1200;
+
+interface GenreCache {
+  ytSongs: Song[];
+  scSongs: Song[];
+  timestamp: number;
+}
+
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function getCachedGenre(genre: string): GenreCache | null {
+  try {
+    const raw = localStorage.getItem(`lauv-genre-${genre}`);
+    if (!raw) return null;
+    const cache: GenreCache = JSON.parse(raw);
+    if (Date.now() - cache.timestamp > CACHE_TTL) {
+      localStorage.removeItem(`lauv-genre-${genre}`);
+      return null;
+    }
+    return cache;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedGenre(genre: string, ytSongs: Song[], scSongs: Song[]) {
+  try {
+    const cache: GenreCache = { ytSongs, scSongs, timestamp: Date.now() };
+    localStorage.setItem(`lauv-genre-${genre}`, JSON.stringify(cache));
+  } catch {}
+}
 
 const randomGradient = (seed: string) => {
   const hash = seed.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -182,6 +162,7 @@ const ForYouPage: React.FC = () => {
   const { currentSong, setCurrentSong, setProgress, isPlaying } =
     usePlayerStore();
   const { setQueue } = useQueueStore();
+  const { ytdlpAvailable } = useSystemStore();
   const [addedGenres, setAddedGenres] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -194,11 +175,13 @@ const ForYouPage: React.FC = () => {
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [ytProgress, setYtProgress] = useState(0); // how many YT queries done
+  const [ytProgress, setYtProgress] = useState(0);
   const seenYtIds = useRef<Set<string>>(new Set());
   const seenScIds = useRef<Set<string>>(new Set());
   const hasMoreRef = useRef(true);
   const abortRef = useRef<number>(0);
+  const accumulatedYt = useRef<Song[]>([]);
+  const accumulatedSc = useRef<Song[]>([]);
 
   useEffect(() => {
     try {
@@ -235,49 +218,56 @@ const ForYouPage: React.FC = () => {
     : ALL_GENRES.filter((g) => !addedGenres.includes(g));
 
   useEffect(() => {
-    if (selectedGenre) {
+    if (selectedGenre && ytdlpAvailable) {
       const generation = ++abortRef.current;
+      const cached = getCachedGenre(selectedGenre);
       setYtSongs([]);
       setScSongs([]);
       setHasMore(true);
       setYtProgress(0);
       seenYtIds.current = new Set();
       seenScIds.current = new Set();
+      accumulatedYt.current = [];
+      accumulatedSc.current = [];
+
+      if (cached) {
+        setYtSongs(cached.ytSongs);
+        setScSongs(cached.scSongs);
+        setYtProgress(YT_SEARCH_QUERIES.length);
+        setHasMore(false);
+        setLoadingStreams(false);
+        setLoadingMore(false);
+        return;
+      }
+
       setLoadingStreams(true);
       loadGenreStreams(selectedGenre, 0, generation);
     }
-  }, [selectedGenre]);
+  }, [selectedGenre, ytdlpAvailable]);
 
   useEffect(() => {
     hasMoreRef.current = hasMore;
   }, [hasMore]);
 
-  // Loads YouTube queries in batches of BATCH_SIZE, then falls back to SoundCloud
   const loadGenreStreams = async (
     genre: string,
     startIdx: number,
     generation: number,
   ) => {
     if (generation !== abortRef.current) return;
-
     const isFirstBatch = startIdx === 0;
     if (!isFirstBatch) setLoadingMore(true);
-
     try {
       const endIdx = Math.min(startIdx + BATCH_SIZE, YT_SEARCH_QUERIES.length);
       const ytExhausted = startIdx >= YT_SEARCH_QUERIES.length;
-
       if (!ytExhausted) {
-        // Fetch a batch of YouTube queries in parallel
         const batchQueries = YT_SEARCH_QUERIES.slice(startIdx, endIdx);
         const results = await Promise.all(
           batchQueries.map((q) =>
             tauriCommands.searchYoutube(q(genre)).catch(() => []),
           ),
         );
-
         if (generation !== abortRef.current) return;
-
         const newYt: Song[] = [];
         for (const yt of results) {
           for (const r of yt || []) {
@@ -289,21 +279,17 @@ const ForYouPage: React.FC = () => {
             newYt.push(mapYtSong(r, "youtube"));
           }
         }
-
+        accumulatedYt.current = [...accumulatedYt.current, ...newYt];
         setYtProgress(endIdx);
-        setYtSongs((prev) => [...prev, ...newYt]);
-
+        setYtSongs([...accumulatedYt.current]);
         const nextIdx = endIdx;
         const allYtDone = nextIdx >= YT_SEARCH_QUERIES.length;
-
         if (!allYtDone && hasMoreRef.current) {
-          // Schedule next batch
           setTimeout(
             () => loadGenreStreams(genre, nextIdx, generation),
             BATCH_DELAY,
           );
         } else if (allYtDone) {
-          // YouTube exhausted — now load SoundCloud
           loadSoundcloudStreams(genre, 0, generation);
         }
       }
@@ -326,15 +312,16 @@ const ForYouPage: React.FC = () => {
     if (generation !== abortRef.current) return;
     if (queryIdx >= SC_SEARCH_QUERIES.length) {
       setHasMore(false);
+      setLoadingStreams(false);
+      setLoadingMore(false);
+      setCachedGenre(genre, accumulatedYt.current, accumulatedSc.current);
       return;
     }
-
     setLoadingMore(true);
     try {
       const query = SC_SEARCH_QUERIES[queryIdx](genre);
       const sc = await tauriCommands.searchSoundcloud(query);
       if (generation !== abortRef.current) return;
-
       const newSc: Song[] = [];
       for (const r of sc || []) {
         const id = `sc-${r.id}`;
@@ -344,9 +331,8 @@ const ForYouPage: React.FC = () => {
         seenScIds.current.add(id);
         newSc.push(mapYtSong(r, "soundcloud"));
       }
-
-      setScSongs((prev) => [...prev, ...newSc]);
-
+      accumulatedSc.current = [...accumulatedSc.current, ...newSc];
+      setScSongs([...accumulatedSc.current]);
       const nextIdx = queryIdx + 1;
       if (nextIdx < SC_SEARCH_QUERIES.length) {
         setTimeout(
@@ -355,13 +341,17 @@ const ForYouPage: React.FC = () => {
         );
       } else {
         setHasMore(false);
+        setLoadingStreams(false);
+        setLoadingMore(false);
+        setCachedGenre(genre, accumulatedYt.current, accumulatedSc.current);
       }
     } catch (err) {
       if (generation === abortRef.current)
         console.error("SC load failed:", err);
       setHasMore(false);
-    } finally {
-      if (generation === abortRef.current) setLoadingMore(false);
+      setLoadingStreams(false);
+      setLoadingMore(false);
+      setCachedGenre(genre, accumulatedYt.current, accumulatedSc.current);
     }
   };
 
@@ -395,6 +385,25 @@ const ForYouPage: React.FC = () => {
     return (
       <div className="ap-detail" ref={scrollRef}>
         <div className="ap-detail-inner">
+          {!ytdlpAvailable && (
+            <div
+              style={{
+                padding: "8px 16px",
+                margin: "1rem 0",
+                borderRadius: 8,
+                background: "rgba(255,170,50,0.08)",
+                border: "1px solid rgba(255,170,50,0.2)",
+                color: "#ffaa33",
+                fontFamily: "'DM Mono',monospace",
+                fontSize: 11,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span>⚠️</span> yt-dlp not installed. Streaming unavailable.
+            </div>
+          )}
           <button className="ap-back" onClick={() => setSelectedGenre(null)}>
             <svg
               viewBox="0 0 24 24"
@@ -408,7 +417,6 @@ const ForYouPage: React.FC = () => {
             </svg>
             For You
           </button>
-
           <div
             className="ap-hero"
             style={{ background: randomGradient(selectedGenre) }}
@@ -468,7 +476,6 @@ const ForYouPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-                {/* Progress indicator */}
                 {!ytDone && (
                   <div
                     style={{
@@ -495,7 +502,7 @@ const ForYouPage: React.FC = () => {
                   >
                     <polygon points="5,3 19,12 5,21" />
                   </svg>
-                  Play All
+                  Play All{" "}
                   <span className="ap-play-count">{allSongs.length}</span>
                 </button>
               )}
@@ -510,7 +517,6 @@ const ForYouPage: React.FC = () => {
               </button>
             </div>
           </div>
-
           <div className="ap-tracks-section">
             {loadingStreams ? (
               <div className="ap-loading">
@@ -523,7 +529,11 @@ const ForYouPage: React.FC = () => {
               </div>
             ) : allSongs.length === 0 ? (
               <div className="ap-loading">
-                <p>No songs found for this genre</p>
+                <p>
+                  {ytdlpAvailable
+                    ? "No songs found for this genre"
+                    : "yt-dlp required to stream"}
+                </p>
               </div>
             ) : (
               <>
@@ -619,11 +629,6 @@ const ForYouPage: React.FC = () => {
                     </svg>
                   </div>
                 )}
-                {!hasMore && !loadingMore && allSongs.length > 0 && (
-                  <div className="ap-end-marker">
-                    <span />— end of results —<span />
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -635,6 +640,26 @@ const ForYouPage: React.FC = () => {
   return (
     <div className="ap-page">
       <div className="ap-container">
+        {!ytdlpAvailable && (
+          <div
+            style={{
+              padding: "8px 16px",
+              margin: "1rem 0",
+              borderRadius: 8,
+              background: "rgba(255,170,50,0.08)",
+              border: "1px solid rgba(255,170,50,0.2)",
+              color: "#ffaa33",
+              fontFamily: "'DM Mono',monospace",
+              fontSize: 11,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span>⚠️</span> yt-dlp not installed. Genre streaming unavailable.
+            Run: pip install yt-dlp
+          </div>
+        )}
         <div className="ap-page-header">
           <div className="ap-page-header-top">
             <div>
@@ -668,7 +693,14 @@ const ForYouPage: React.FC = () => {
               </div>
               <button
                 className="ap-add-btn"
-                onClick={() => setShowAddModal(true)}
+                onClick={() => {
+                  if (!ytdlpAvailable) return;
+                  setShowAddModal(true);
+                }}
+                style={{
+                  opacity: ytdlpAvailable ? 1 : 0.5,
+                  cursor: ytdlpAvailable ? "pointer" : "not-allowed",
+                }}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -697,7 +729,10 @@ const ForYouPage: React.FC = () => {
             <button
               className="ap-add-btn"
               style={{ marginTop: 16 }}
-              onClick={() => setShowAddModal(true)}
+              onClick={() => {
+                if (!ytdlpAvailable) return;
+                setShowAddModal(true);
+              }}
             >
               <svg
                 viewBox="0 0 24 24"
@@ -723,8 +758,15 @@ const ForYouPage: React.FC = () => {
                 <div
                   key={genre}
                   className="ap-card"
-                  onClick={() => setSelectedGenre(genre)}
-                  style={{ animationDelay: `${idx * 0.03}s` }}
+                  onClick={() => {
+                    if (!ytdlpAvailable) return;
+                    setSelectedGenre(genre);
+                  }}
+                  style={{
+                    animationDelay: `${idx * 0.03}s`,
+                    opacity: ytdlpAvailable ? 1 : 0.6,
+                    cursor: ytdlpAvailable ? "pointer" : "default",
+                  }}
                 >
                   <div
                     className="ap-card-avatar"

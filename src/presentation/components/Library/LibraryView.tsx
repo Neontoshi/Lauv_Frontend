@@ -4,6 +4,7 @@ import { useLibrary } from "../../hooks/useLibrary";
 import { usePlayerStore } from "../../stores/playerStore";
 import { useUIStore } from "../../stores/uiStore";
 import { useYouTubeStore } from "../../stores/youtubeStore";
+import { useSystemStore } from "../../stores/systemStore";
 import { Song } from "../../../core/entities/Song";
 import { useQueueStore } from "../../stores/queueStore";
 import { useLibraryStore } from "../../stores/libraryStore";
@@ -39,6 +40,7 @@ const LibraryView: React.FC = () => {
   const { setCurrentSong, setProgress, currentSong } = usePlayerStore();
   const { libraryView, setLibraryView } = useUIStore();
   const { setQueue } = useQueueStore();
+  const { ytdlpAvailable } = useSystemStore();
   const {
     results: ytSongs,
     isSearching,
@@ -63,15 +65,15 @@ const LibraryView: React.FC = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !ytdlpAvailable) return;
     const timer = setTimeout(() => {
       searchYouTube(searchQuery);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, ytdlpAvailable]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !ytdlpAvailable) return;
     const timer = setTimeout(() => {
       setIsScSearching(true);
       tauriCommands
@@ -105,7 +107,7 @@ const LibraryView: React.FC = () => {
         .catch(() => setIsScSearching(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, ytdlpAvailable]);
 
   const displaySongs: Song[] = useMemo(() => {
     if (!isSearching_) return localSongs;
@@ -126,15 +128,6 @@ const LibraryView: React.FC = () => {
     }
     return [];
   }, [localSongs, ytSongs, scSongs, activeTab, isSearching_]);
-
-  const totalDuration = localSongs.reduce((acc, song) => {
-    const parts = song.dur.split(":");
-    return acc + parseInt(parts[0]) * 60 + parseInt(parts[1]);
-  }, 0);
-  //@ts-ignore
-  const _totalHours = Math.floor(totalDuration / 3600);
-  //@ts-ignore
-  const _totalMinutes = Math.floor((totalDuration % 3600) / 60);
 
   const handlePlaySong = (song: Song) => {
     const combined = [...localSongs, ...ytSongs, ...scSongs];
@@ -198,6 +191,26 @@ const LibraryView: React.FC = () => {
           borderBottom: "1px solid var(--border)",
         }}
       >
+        {!ytdlpAvailable && (
+          <div
+            style={{
+              padding: "8px 16px",
+              marginBottom: 12,
+              borderRadius: 8,
+              background: "rgba(255,170,50,0.08)",
+              border: "1px solid rgba(255,170,50,0.2)",
+              color: "#ffaa33",
+              fontFamily: "'DM Mono',monospace",
+              fontSize: 11,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span>⚠️</span> yt-dlp not installed. Streaming search unavailable.
+            Run: pip install yt-dlp
+          </div>
+        )}
         <div className="search-wrap" style={{ maxWidth: "100%" }}>
           <svg
             viewBox="0 0 24 24"
@@ -251,23 +264,6 @@ const LibraryView: React.FC = () => {
                 <line x1="4" y1="20" x2="21" y2="3" />
                 <polyline points="21 16 21 21 16 21" />
                 <line x1="15" y1="15" x2="21" y2="21" />
-              </svg>
-            </div>
-            <div
-              className="icon-btn"
-              title="Add to library"
-              style={{ width: "32px", height: "32px" }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                width="15"
-                height="15"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
             </div>
             <div className="view-toggle">
@@ -354,7 +350,10 @@ const LibraryView: React.FC = () => {
               Library ({localSongs.length})
             </button>
             <button
-              onClick={() => setActiveTab("youtube")}
+              onClick={() => {
+                if (!ytdlpAvailable) return;
+                setActiveTab("youtube");
+              }}
               style={{
                 padding: "8px 24px",
                 background: "transparent",
@@ -364,17 +363,21 @@ const LibraryView: React.FC = () => {
                     ? "2px solid var(--accent)"
                     : "2px solid transparent",
                 color: activeTab === "youtube" ? "var(--text)" : "var(--text3)",
-                cursor: "pointer",
+                cursor: ytdlpAvailable ? "pointer" : "not-allowed",
                 fontFamily: "'Syne', sans-serif",
                 fontSize: "13px",
                 fontWeight: activeTab === "youtube" ? 600 : 400,
+                opacity: ytdlpAvailable ? 1 : 0.5,
               }}
             >
               YouTube{ytSongs.length > 0 ? ` (${ytSongs.length})` : ""}
               {isSearching && !ytSongs.length && " ···"}
             </button>
             <button
-              onClick={() => setActiveTab("soundcloud")}
+              onClick={() => {
+                if (!ytdlpAvailable) return;
+                setActiveTab("soundcloud");
+              }}
               style={{
                 padding: "8px 24px",
                 background: "transparent",
@@ -385,10 +388,11 @@ const LibraryView: React.FC = () => {
                     : "2px solid transparent",
                 color:
                   activeTab === "soundcloud" ? "var(--text)" : "var(--text3)",
-                cursor: "pointer",
+                cursor: ytdlpAvailable ? "pointer" : "not-allowed",
                 fontFamily: "'Syne', sans-serif",
                 fontSize: "13px",
                 fontWeight: activeTab === "soundcloud" ? 600 : 400,
+                opacity: ytdlpAvailable ? 1 : 0.5,
               }}
             >
               SoundCloud{scSongs.length > 0 ? ` (${scSongs.length})` : ""}

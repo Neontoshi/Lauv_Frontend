@@ -13,12 +13,16 @@ function useVisualizer(
   isPlaying: boolean,
 ) {
   const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
   const visualizerRef = useRef<any>(null);
   const animIdRef = useRef<number>(0);
   const [presetName, setPresetName] = useState("");
   const presets = butterchurnPresets.getPresets();
   const presetNames = Object.keys(presets);
+
+  // Keep ref in sync
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   const loadRandomPreset = useCallback(() => {
     if (!visualizerRef.current) return;
@@ -62,7 +66,9 @@ function useVisualizer(
     observer.observe(canvas);
 
     const render = () => {
-      viz.render();
+      if (isPlayingRef.current) {
+        viz.render();
+      }
       animIdRef.current = requestAnimationFrame(render);
     };
     animIdRef.current = requestAnimationFrame(render);
@@ -98,7 +104,16 @@ const OverlayControls: React.FC<{
 
   return (
     <>
-      <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, display: "flex", gap: 8 }}>
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          right: 12,
+          zIndex: 10,
+          display: "flex",
+          gap: 8,
+        }}
+      >
         <button onClick={onToggleFullscreen} style={btnStyle}>
           {isFullscreen ? "✕ Exit" : "⛶ Fullscreen"}
         </button>
@@ -107,13 +122,24 @@ const OverlayControls: React.FC<{
         </button>
       </div>
       {presetName && (
-        <div style={{
-          position: "absolute", bottom: 12, left: 12, zIndex: 10,
-          color: "rgba(255,255,255,0.3)", fontSize: 10,
-          fontFamily: "'DM Mono', monospace", maxWidth: "60%",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          background: "rgba(0,0,0,0.4)", padding: "4px 8px", borderRadius: 12,
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            bottom: 12,
+            left: 12,
+            zIndex: 10,
+            color: "rgba(255,255,255,0.3)",
+            fontSize: 10,
+            fontFamily: "'DM Mono', monospace",
+            maxWidth: "60%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            background: "rgba(0,0,0,0.4)",
+            padding: "4px 8px",
+            borderRadius: 12,
+          }}
+        >
           🎵 {presetName}
         </div>
       )}
@@ -129,32 +155,79 @@ const FullscreenVisualizer: React.FC<{
   const { presetName, loadRandomPreset } = useVisualizer(canvasRef, isPlaying);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
   return createPortal(
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000" }}>
-      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
-      <OverlayControls presetName={presetName} isFullscreen={true} onToggleFullscreen={onClose} onNextPreset={loadRandomPreset} />
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#000" }}
+    >
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+        }}
+      />
+      <OverlayControls
+        presetName={presetName}
+        isFullscreen={true}
+        onToggleFullscreen={onClose}
+        onNextPreset={loadRandomPreset}
+      />
     </div>,
     document.body,
   );
 };
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isPlaying, className = "" }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
+  isPlaying,
+  className = "",
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { presetName, loadRandomPreset } = useVisualizer(canvasRef, isPlaying);
 
   return (
     <>
-      <div style={{ position: "relative", width: "100%", height: "100%", background: "#000", overflow: "hidden" }}>
-        <canvas ref={canvasRef} className={className} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
-        <OverlayControls presetName={presetName} isFullscreen={false} onToggleFullscreen={() => setIsFullscreen(true)} onNextPreset={loadRandomPreset} />
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          background: "#000",
+          overflow: "hidden",
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          className={className}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        />
+        <OverlayControls
+          presetName={presetName}
+          isFullscreen={false}
+          onToggleFullscreen={() => setIsFullscreen(true)}
+          onNextPreset={loadRandomPreset}
+        />
       </div>
-      {isFullscreen && <FullscreenVisualizer isPlaying={isPlaying} onClose={() => setIsFullscreen(false)} />}
+      {isFullscreen && (
+        <FullscreenVisualizer
+          isPlaying={isPlaying}
+          onClose={() => setIsFullscreen(false)}
+        />
+      )}
     </>
   );
 };

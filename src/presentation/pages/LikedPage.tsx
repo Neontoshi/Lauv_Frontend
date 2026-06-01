@@ -100,15 +100,9 @@ const LikedPage: React.FC = () => {
     if (filtered.length > 0) handlePlay(filtered[0], 0);
   };
 
-  const handleShuffle = () => {
-    const pick = filtered[Math.floor(Math.random() * filtered.length)];
-    if (pick) handlePlay(pick, filtered.indexOf(pick));
-  };
-
   return (
     <div className="ap-page">
       <div className="ap-container" style={{ paddingBottom: "6rem" }}>
-        {/* Header — tight */}
         <div
           style={{
             display: "flex",
@@ -192,7 +186,6 @@ const LikedPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Controls bar */}
         <div
           style={{
             display: "flex",
@@ -224,38 +217,6 @@ const LikedPage: React.FC = () => {
               <polygon points="5,3 19,12 5,21" />
             </svg>
             Play All
-          </button>
-          <button
-            onClick={handleShuffle}
-            style={{
-              padding: "9px 18px",
-              borderRadius: 99,
-              background: "transparent",
-              border: "1px solid var(--border)",
-              color: "var(--text2)",
-              fontFamily: "'Syne',sans-serif",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="13"
-              height="13"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <polyline points="16 3 21 3 21 8" />
-              <line x1="4" y1="20" x2="21" y2="3" />
-              <polyline points="21 16 21 21 16 21" />
-              <line x1="15" y1="15" x2="21" y2="21" />
-            </svg>
-            Shuffle
           </button>
           <button
             onClick={() => setSortMode((sortMode + 1) % sortModes.length)}
@@ -333,7 +294,6 @@ const LikedPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Track list */}
         {filtered.length === 0 ? (
           <div
             style={{
